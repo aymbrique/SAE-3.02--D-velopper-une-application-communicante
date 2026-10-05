@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from src.gui.map_view import MapView
+from src.interface.map_view import MapView
 from src.simulation.demo import DemoScenario
 
 

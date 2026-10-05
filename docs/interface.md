@@ -35,8 +35,8 @@ Il n’y a pas encore de débit de génération de trafic ni de commandes pour d
 
 - `src/models/route.py` ne dépend pas de Qt : il décrit les points et donne une position et une orientation le long d’un trajet.
 - `src/simulation/demo.py` décrit la chronologie fixe et produit un état visuel à un instant donné.
-- `src/gui/map_view.py` dessine uniquement cet état.
-- `src/gui/main_window.py` gère les commandes, le minuteur et les panneaux.
+- `src/interface/map_view.py` dessine uniquement cet état.
+- `src/interface/main_window.py` gère les commandes, le minuteur et les panneaux.
 
 Le futur moteur pourra remplacer `DemoScenario` sans réécrire toute la scène graphique. Les algorithmes de circulation, d’espacement, de priorité, de compensation et le réseau ne doivent pas être ajoutés dans les fonctions de dessin.
 

@@ -55,11 +55,11 @@ Dans PyCharm, ouvrir le dossier du projet, sélectionner l’interpréteur de `.
 
 ```text
 main.py                       Lancement de l’application
-src/gui/main_window.py        Fenêtre, commandes et indicateurs
-src/gui/map_view.py           Carte 2D, feux, véhicules et trajets visibles
+src/interface/main_window.py  Fenêtre, commandes et indicateurs
+src/interface/map_view.py     Carte 2D, feux, véhicules et trajets visibles
 src/models/route.py           Géométrie et interpolation des déplacements
 src/simulation/demo.py        Chronologie fixe de la démonstration
-src/network/                  Réservé à la future communication TCP
+src/reseau/                   Réservé à la future communication TCP
 tests/test_demo.py            Tests de la géométrie et du scénario
 docs/                         Cahier des charges, guide et aperçu
 ```
