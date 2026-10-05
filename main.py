@@ -1,20 +1,16 @@
+"""Point d'entrée de l'interface graphique de la SAÉ 3.02."""
+
 import sys
 
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtWidgets import QApplication
 
-
-class MainWindow(QMainWindow):
-
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("Simulation")
-        self.resize(1000, 700)
+from src.gui.main_window import MainWindow
 
 
 def main():
     app = QApplication(sys.argv)
-
+    app.setApplicationName("SAE302 - Facture Sucrée")
+    app.setStyle("Fusion")
     window = MainWindow()
     window.show()
 

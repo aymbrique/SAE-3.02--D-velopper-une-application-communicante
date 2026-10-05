@@ -1,8 +1,25 @@
 # SAE302 — Facture Sucrée
 
-Projet de simulation de trafic à Colmar d’Aymeri et Selim. La version actuelle contient une fenêtre PyQt6 vide, intitulée **Simulation**, de 1 000 × 700 pixels.
+Simulation de trafic à Colmar, réalisée par **Aymeri et Selim** pour la SAÉ 3.02 du BUT Réseaux & Télécommunications.
 
-Le [cahier des charges](docs/Cahier_des_charges_SAE302.pdf) décrit les fonctionnalités à développer : circulation, feux, priorité de deux véhicules de secours et communication TCP avec un centre de coordination.
+## Version actuelle : interface graphique et animation 2D
+
+Cette version affiche une carte simplifiée, un carrefour à quatre branches, la caserne, des bâtiments et les feux. Huit trajets de voitures sont prédéfinis : les véhicules avancent, attendent, tournent à gauche ou à droite et quittent la scène. Deux véhicules de secours suivent chacun un parcours de démonstration, avec des gyrophares animés et un retour à la caserne.
+
+L’interface comprend :
+
+- lancement, pause, reprise et réinitialisation ;
+- vitesses ×0,5, ×1 et ×2 ;
+- zoom, déplacement de la carte et retour à la vue complète ;
+- affichage du trajet choisi ;
+- temps simulé, voitures présentes, voitures à l’arrêt et trajets terminés ;
+- état distinct **disponible / occupé** et progression de chaque secours.
+
+![Aperçu de l’interface](docs/apercu_interface.png)
+
+Les déplacements et les attentes sont inscrits dans une chronologie fixe. Les feux illustrent un cycle de 8 s de vert, 1 s d’orange et 1 s de rouge simultané. **Aucune génération aléatoire, décision de priorité, détection de collision en temps réel ou communication réseau n’est encore implémentée.** Les états affichés par le centre de coordination sont ceux du scénario local. Les horaires ont été préparés pour éviter les chevauchements dans cette démonstration.
+
+Le [cahier des charges](docs/Cahier_des_charges_SAE302.pdf) reste la référence pour la simulation complète. Le [guide de l’interface et l’ordre de développement](docs/interface.md) expliquent cette étape et la suite du projet.
 
 ## Récupérer le projet
 
@@ -11,14 +28,9 @@ git clone https://github.com/aymbrique/SAE-3.02--D-velopper-une-application-comm
 cd SAE302-Facture-Sucree
 ```
 
-## Prérequis
-
-- Python 3.13.
-- PyCharm pour ouvrir et lancer le projet.
-
 ## Installation
 
-Depuis le dossier du projet, créer un environnement propre à ce projet puis installer les versions enregistrées dans `requirements.txt`.
+Prérequis : **Python 3.13**. PyCharm peut être utilisé sur les deux ordinateurs.
 
 ### macOS / Linux
 
@@ -26,6 +38,7 @@ Depuis le dossier du projet, créer un environnement propre à ce projet puis in
 python3.13 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+python main.py
 ```
 
 ### Windows — PowerShell
@@ -33,65 +46,32 @@ python -m pip install -r requirements.txt
 ```powershell
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-L’environnement `.venv` se recrée sur chaque ordinateur et reste exclu du dépôt Git.
-
-## Ouvrir et lancer dans PyCharm
-
-1. Ouvrir le dossier `SAE302-Facture-Sucree` comme projet.
-2. Sélectionner l’interpréteur Python de l’environnement existant :
-   - macOS / Linux : `.venv/bin/python` ;
-   - Windows : `.venv\Scripts\python.exe`.
-3. Ouvrir `main.py`, puis lancer ce fichier avec **Run**.
-
-Une fenêtre vide **Simulation** doit apparaître. Fermer cette fenêtre pour terminer le programme.
-
-Pour lancer depuis le terminal activé sur macOS / Linux :
-
-```bash
-python main.py
-```
-
-Sur Windows, sans activation de l’environnement :
-
-```powershell
 .\.venv\Scripts\python.exe main.py
 ```
+
+Dans PyCharm, ouvrir le dossier du projet, sélectionner l’interpréteur de `.venv`, puis lancer `main.py` avec **Run**. Cliquer sur **Lancer la démonstration** pour commencer. L’environnement `.venv` se recrée sur chaque ordinateur et reste exclu du dépôt.
 
 ## Organisation
 
 ```text
-SAE302-Facture-Sucree/
-├── README.md
-├── requirements.txt
-├── .gitignore
-├── main.py
-├── src/
-│   ├── __init__.py
-│   ├── gui/
-│   │   └── __init__.py
-│   ├── simulation/
-│   │   └── __init__.py
-│   ├── network/
-│   │   └── __init__.py
-│   └── models/
-│       └── __init__.py
-├── tests/
-└── docs/
+main.py                       Lancement de l’application
+src/gui/main_window.py        Fenêtre, commandes et indicateurs
+src/gui/map_view.py           Carte 2D, feux, véhicules et trajets visibles
+src/models/route.py           Géométrie et interpolation des déplacements
+src/simulation/demo.py        Chronologie fixe de la démonstration
+src/network/                  Réservé à la future communication TCP
+tests/test_demo.py            Tests de la géométrie et du scénario
+docs/                         Cahier des charges, guide et aperçu
 ```
 
-| Dossier | Rôle prévu |
-| --- | --- |
-| `src/gui/` | Fenêtres et affichage PyQt6 |
-| `src/simulation/` | Déplacements, circulation et feux |
-| `src/models/` | Véhicules, feux et intersections |
-| `src/network/` | Sockets TCP et états des véhicules de secours |
-| `tests/` | Tests Python |
-| `docs/` | Cahier des charges, schémas et documentation |
+## Vérification
 
-## État et prochaine étape
+Depuis la racine du projet :
 
-Cette première base contient la structure du projet, la fenêtre PyQt6 et le cahier des charges. Elle est publiée dans ce dépôt GitHub. La circulation, les feux, les véhicules de secours et le réseau ne sont pas encore implémentés. Le dossier `tests/` est réservé aux futurs tests ; aucun test automatisé n’est encore présent.
+```bash
+python -m unittest discover -s tests -v
+```
 
-La prochaine étape sera d’afficher un carrefour fixe avec `QGraphicsScene` et `QGraphicsView`. Les véhicules, feux et communications réseau viendront ensuite.
+Les huit tests couvrent les trajets, les transitions des feux, les attentes, les états indépendants des secours, le retour au stationnement, la répétition et dix minutes de temps simulé. Un contrôle échantillonné vérifie aussi les écarts entre véhicules du scénario fixe. Ces tests ne remplacent pas les futurs essais du moteur de circulation.
+
+L’interface a également été vérifiée avec PyQt6 : lecture réelle du minuteur, pause/reprise, vitesses, sélection des trajets, retour à la vue complète et réinitialisation.
