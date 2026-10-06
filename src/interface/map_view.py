@@ -4,7 +4,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
 from PyQt6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
 
-from src.simulation.demo import CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH
+from src.models.layout import CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH
 
 
 SIGNAL_COLORS = {"red": "#f58178", "amber": "#ffd16c", "green": "#6de0b1"}
@@ -84,7 +84,7 @@ class MapView(QGraphicsView):
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setBackgroundBrush(QColor("#e8efe9"))
-        self.setMinimumSize(480, 450)
+        self.setMinimumSize(420, 340)
         self.setAccessibleName("Carte 2D du carrefour de Colmar")
         self.vehicle_items = {}
         self.lights = {}
@@ -123,9 +123,9 @@ class MapView(QGraphicsView):
                                    (65, 540, 380, 240), (655, 540, 385, 240)):
             self.draw_rect(x, y, width, height, "#dce8dc", 24)
         # Allées de la caserne et du point d'intervention.
-        self.draw_rect(285, 188, 210, 146, "#cad5d2", 12)
+        self.draw_rect(245, 178, 250, 156, "#cad5d2", 12)
         self.draw_rect(495, 192, 86, 46, "#cad5d2")
-        self.draw_rect(495, 680, 333, 78, "#cbd6d2", 15)
+        self.draw_rect(495, 680, 345, 96, "#cbd6d2", 15)
         # Trottoirs et chaussée, une voie dans chaque sens.
         self.draw_rect(0, CY - ROAD_HALF - 13, SCENE_WIDTH, 2 * ROAD_HALF + 26, "#c7d2d0")
         self.draw_rect(CX - ROAD_HALF - 13, 0, 2 * ROAD_HALF + 26, SCENE_HEIGHT, "#c7d2d0")

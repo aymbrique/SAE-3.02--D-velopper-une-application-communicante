@@ -1,15 +1,16 @@
-"""Fenêtre de lecture de la démonstration graphique."""
+"""Commandes de la simulation ; le moteur et le reseau restent independants."""
 
 from math import ceil
 
 from PyQt6.QtCore import QElapsedTimer, QTimer, Qt
 from PyQt6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QMainWindow,
-    QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QProgressBar, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from src.interface.map_view import MapView
-from src.simulation.demo import DemoScenario
+from src.simulation.engine import Simulation
+from src.models.layout import car_route
 
 
 STYLE = """
@@ -31,6 +32,7 @@ QPushButton:pressed { background: #dcece0; }
 QPushButton#primary { background: #367b5c; border-color: #367b5c; color: #ffffff; padding: 11px; }
 QPushButton#primary:hover { background: #2c684d; }
 QPushButton:checked { background: #e6f3e9; border-color: #85b79b; color: #2d704f; }
+QPushButton:disabled { background: #edf0ed; color: #829087; border-color: #e0e5e1; }
 QComboBox { background: white; border: 1px solid #d7e3da; border-radius: 6px; padding: 7px; }
 QComboBox::drop-down { border: none; width: 20px; }
 QCheckBox { spacing: 6px; font-size: 11px; }
@@ -56,13 +58,14 @@ def card():
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, client=None):
         super().__init__()
         self.setWindowTitle("SAE302 · Facture Sucrée · Simulation 2D")
         self.resize(1320, 860)
-        self.setMinimumSize(1080, 780)
+        self.setMinimumSize(960, 680)
         self.setStyleSheet(STYLE)
-        self.scenario = DemoScenario()
+        self.scenario = Simulation()
+        self.client = client
         self.elapsed = 0.0
         self.playing = False
         self.speed = 1.0
@@ -91,10 +94,12 @@ class MainWindow(QMainWindow):
         heading.setSpacing(5)
         heading.addWidget(label("SAÉ 3.02  /  AYMERI & SELIM", "eyebrow"))
         heading.addWidget(label("Circulation & secours", "title"))
-        heading.addWidget(label("Colmar · Un carrefour, deux véhicules de secours, une vue d’ensemble.", "subtitle"))
+        subtitle = label("Colmar · Un carrefour, deux véhicules de secours, une vue d’ensemble.", "subtitle")
+        subtitle.setWordWrap(True)
+        heading.addWidget(subtitle)
         line.addLayout(heading)
         line.addStretch()
-        line.addWidget(label("SCÉNARIO FIXE · 2D", "badge"))
+        line.addWidget(label("SIMULATION · TCP", "badge"))
         outer.addWidget(header)
 
         body = QHBoxLayout()
@@ -115,10 +120,12 @@ class MainWindow(QMainWindow):
         route_row.addWidget(self.route_checkbox)
         self.route_combo = QComboBox()
         self.route_combo.setAccessibleName("Trajet à observer sur la carte")
-        self.route_combo.addItem("Pompiers · secours 01", self.scenario.tracks[-2].route)
-        self.route_combo.addItem("Ambulance · secours 02", self.scenario.tracks[-1].route)
-        for track in self.scenario.tracks[:-2]:
-            self.route_combo.addItem(track.route.name, track.route)
+        for rescue in self.scenario.rescues:
+            self.route_combo.addItem(rescue.route.name, rescue.route)
+        for origin in ("N", "S", "E", "W"):
+            for turn in ("straight", "left", "right"):
+                route, _ = car_route(origin, turn)
+                self.route_combo.addItem(route.name, route)
         self.route_combo.setEnabled(False)
         self.route_combo.currentIndexChanged.connect(self._update_route)
         route_row.addWidget(self.route_combo, 1)
@@ -143,7 +150,7 @@ class MainWindow(QMainWindow):
         sidebar.setSpacing(12)
         controls, controls_layout = card()
         controls_layout.addWidget(label("Lecture de la scène", "section"))
-        self.play_button = QPushButton("▶  Lancer la démonstration")
+        self.play_button = QPushButton("▶  Demarrer")
         self.play_button.setObjectName("primary")
         self.play_button.clicked.connect(self.toggle_play)
         controls_layout.addWidget(self.play_button)
@@ -162,6 +169,14 @@ class MainWindow(QMainWindow):
             self.speed_group.addButton(button, index)
             speed_row.addWidget(button)
         controls_layout.addLayout(speed_row)
+        traffic_row = QHBoxLayout()
+        traffic_row.addWidget(label("Voitures / minute"))
+        self.rate_input = QSpinBox()
+        self.rate_input.setRange(0, 60)
+        self.rate_input.setValue(self.scenario.rate)
+        self.rate_input.valueChanged.connect(self._change_rate)
+        traffic_row.addWidget(self.rate_input)
+        controls_layout.addLayout(traffic_row)
         sidebar.addWidget(controls)
 
         lights, lights_layout = card()
@@ -188,9 +203,10 @@ class MainWindow(QMainWindow):
         sidebar.addWidget(metrics)
 
         rescue_card, rescue_layout = card()
-        rescue_layout.addWidget(label("Centre de coordination", "section"))
-        rescue_layout.addWidget(label("Suivi du scénario de démonstration", "muted"))
+        rescue_layout.addWidget(label("Interventions", "section"))
         self.rescue_widgets = {}
+        self.mission_buttons = {}
+        self.estimate_labels = {}
         for identifier, name in (("01", "Pompiers"), ("02", "Ambulance")):
             row = QHBoxLayout()
             row.addWidget(label(f"{name} · {identifier}", "phase"))
@@ -205,24 +221,41 @@ class MainWindow(QMainWindow):
             progress.setTextVisible(False)
             progress.setAccessibleName(f"Progression du parcours du secours {identifier}")
             rescue_layout.addWidget(progress)
+            estimates = label("", "muted")
+            estimates.setWordWrap(True)
+            rescue_layout.addWidget(estimates)
+            self.estimate_labels[identifier] = estimates
+            button = QPushButton(f"Envoyer le secours {identifier}")
+            button.clicked.connect(lambda checked, ident=identifier: self.start_mission(ident))
+            controls_layout.addWidget(button)
+            self.mission_buttons[identifier] = button
             if identifier == "01":
                 rescue_layout.addSpacing(8)
             self.rescue_widgets[identifier] = (status, stage, progress)
         sidebar.addWidget(rescue_card)
+        network_card, network_layout = card()
+        network_layout.addWidget(label("Centre distant", "section"))
+        self.network_label = label("", "muted")
+        self.network_label.setWordWrap(True)
+        network_layout.addWidget(self.network_label)
+        self.debt_label = label("", "muted")
+        self.debt_label.setWordWrap(True)
+        network_layout.addWidget(self.debt_label)
+        sidebar.addWidget(network_card)
         sidebar.addStretch()
         # Conserver des commandes lisibles sur un écran moins haut.
         sidebar_widget.setMinimumHeight(672)
         self.sidebar_scroll = QScrollArea()
         self.sidebar_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.sidebar_scroll.setWidgetResizable(True)
-        self.sidebar_scroll.setFixedWidth(304)
+        self.sidebar_scroll.setFixedWidth(330)
         self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.sidebar_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         self.sidebar_scroll.setWidget(sidebar_widget)
         body.addWidget(self.sidebar_scroll)
         outer.addLayout(body, 1)
-        self.footer = label("PRÊT À DÉMARRER  ·  Parcours prédéfinis · Séquences répétées · Temps simulé", "muted")
+        self.footer = label("", "muted")
         outer.addWidget(self.footer)
 
     @staticmethod
@@ -245,6 +278,10 @@ class MainWindow(QMainWindow):
         self.clock.restart()
 
     def reset(self):
+        self.scenario = Simulation(rate=self.rate_input.value())
+        if self.client:
+            for identifier in ("01", "02"):
+                self.client.publish(identifier, "disponible")
         self.elapsed = 0
         self.playing = False
         self.clock.restart()
@@ -253,8 +290,23 @@ class MainWindow(QMainWindow):
     def _tick(self):
         dt = min(self.clock.restart() / 1000, 0.1)
         if self.playing:
-            self.elapsed += dt * self.speed
-            self.refresh()
+            self.scenario.advance(dt * self.speed)
+            self.elapsed = self.scenario.time
+        self._publish_events()
+        self.refresh()
+
+    def _change_rate(self, value):
+        self.scenario.rate = value
+
+    def start_mission(self, identifier):
+        self.scenario.start_mission(identifier)
+        self._publish_events()
+        self.refresh()
+
+    def _publish_events(self):
+        for identifier, state in self.scenario.drain_events():
+            if self.client:
+                self.client.publish(identifier, state)
 
     def _update_route(self, *args):
         enabled = self.route_checkbox.isChecked()
@@ -262,7 +314,7 @@ class MainWindow(QMainWindow):
         self.view.set_route(self.route_combo.currentData() if enabled else None)
 
     def refresh(self):
-        frame = self.scenario.frame_at(self.elapsed)
+        frame = self.scenario.frame()
         self.view.sync(frame, self.elapsed)
         total_seconds = int(self.elapsed)
         self.clock_label.setText(f"{total_seconds // 60:02d}:{total_seconds % 60:02d}")
@@ -275,18 +327,41 @@ class MainWindow(QMainWindow):
             item = self.signal_labels[axis]
             item.setText("●  " + names[signal])
             item.setStyleSheet(f"color: {text_colors[signal]}; font-weight: bold;")
-        self.phase_label.setText(f"{frame.phase_name} · {ceil(frame.phase_remaining)} s")
+        remaining = f"{ceil(frame.phase_remaining)} s" if frame.phase_remaining > 0 else "passage en cours"
+        self.phase_label.setText(f"{frame.phase_name} · {remaining}")
         for rescue in frame.rescues:
             status, stage, progress = self.rescue_widgets[rescue.identifier]
             status.setText("Occupé" if rescue.busy else "Disponible")
             status.setStyleSheet(f"font-size: 11px; font-weight: bold; color: {'#be7654' if rescue.busy else '#438b63'};")
             stage.setText(rescue.stage)
             progress.setValue(round(rescue.progress * 1000))
+            self.mission_buttons[rescue.identifier].setEnabled(not rescue.busy)
+            self.mission_buttons[rescue.identifier].setText(
+                f"Secours {rescue.identifier} en mission" if rescue.busy else f"Envoyer le secours {rescue.identifier}")
+            model = next(v for v in self.scenario.rescues if v.identifier == rescue.identifier)
+            distance, eta = self.scenario.approach(model)
+            approach = f"Carrefour : {distance:.0f} m / {eta:.1f} s" if distance is not None else "Carrefour franchi"
+            remaining_time = ((model.route.length - model.distance) / model.speed
+                              + (model.dwell_remaining if model.visited else 8))
+            self.estimate_labels[rescue.identifier].setText(
+                f"{approach}\nMission : {self.elapsed - model.started_at:.0f} s ecoulees\n"
+                f"Estimation hors attentes :\n{remaining_time:.0f} s restantes / {model.total_estimate:.0f} s au depart"
+                if model.busy else f"Duree prevue hors attentes : {model.total_estimate:.0f} s")
         self.play_button.setText("Ⅱ  Mettre en pause" if self.playing else
-                                 ("▶  Reprendre" if self.elapsed > 0 else "▶  Lancer la démonstration"))
+                                 ("▶  Reprendre" if self.elapsed > 0 else "▶  Demarrer"))
         status = "EN COURS" if self.playing else ("EN PAUSE" if self.elapsed > 0 else "PRÊT À DÉMARRER")
-        self.footer.setText(f"{status}  ·  Parcours prédéfinis · Séquences répétées · Temps simulé")
+        self.footer.setText(f"{status}  ·  25 voitures maximum · Priorite secours · Temps simule")
+        if self.client:
+            network_status, pending = self.client.snapshot()
+            self.network_label.setText(f"{network_status}\n{self.client.host}:{self.client.port}\n"
+                                       f"Mises a jour en attente : {pending}")
+        else:
+            self.network_label.setText("Mode local - centre non connecte")
+        debt = self.scenario.lights.debt
+        self.debt_label.setText(f"Compensation en attente :\nNord-Sud {debt['NS']:.1f} s / Est-Ouest {debt['EW']:.1f} s")
 
     def closeEvent(self, event):
         self.timer.stop()
+        if self.client:
+            self.client.close()
         super().closeEvent(event)
