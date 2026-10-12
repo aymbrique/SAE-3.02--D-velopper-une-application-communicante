@@ -27,9 +27,18 @@ def car_route(origin, turn):
                       "E": (1075, CY - LANE), "S": (CX + LANE, 835)}[origin]
     end_x, end_y = transformed[-1]
     prev_x, prev_y = transformed[-2]
-    transformed[-1] = ((1075 if end_x > prev_x else 25, end_y)
-                       if abs(end_x - prev_x) > abs(end_y - prev_y)
-                       else (end_x, 835 if end_y > prev_y else 25))
+    # Prolonger le dernier segment jusqu'au bord de la carte.
+    if abs(end_x - prev_x) > abs(end_y - prev_y):
+        if end_x > prev_x:
+            end_x = 1075
+        else:
+            end_x = 25
+    else:
+        if end_y > prev_y:
+            end_y = 835
+        else:
+            end_y = 25
+    transformed[-1] = (end_x, end_y)
     names = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
     movements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
     route = Route(f"{names[origin]} - {movements[turn]}", tuple(transformed))

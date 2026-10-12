@@ -1,5 +1,6 @@
 """Etat metier et instantane de dessin, sans dependance a Qt."""
 
+# dataclass cree le constructeur de ces simples fiches de donnees.
 from dataclasses import dataclass
 from src.models.route import Route
 
@@ -25,7 +26,9 @@ class Vehicle:
 
     @property
     def crossing(self):
-        return self.crossings[self.crossing_index] if self.crossing_index < len(self.crossings) else None
+        if self.crossing_index < len(self.crossings):
+            return self.crossings[self.crossing_index]
+        return None
 
     @property
     def position(self):
@@ -58,8 +61,16 @@ class Frame:
 
     @property
     def cars(self):
-        return tuple(v for v in self.vehicles if v.kind == "car")
+        cars = []
+        for vehicle in self.vehicles:
+            if vehicle.kind == "car":
+                cars.append(vehicle)
+        return tuple(cars)
 
     @property
     def rescues(self):
-        return tuple(v for v in self.vehicles if v.kind != "car")
+        rescues = []
+        for vehicle in self.vehicles:
+            if vehicle.kind != "car":
+                rescues.append(vehicle)
+        return tuple(rescues)

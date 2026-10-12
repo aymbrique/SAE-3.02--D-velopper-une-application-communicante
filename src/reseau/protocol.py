@@ -7,7 +7,9 @@ MAX_LINE = 4096
 
 
 def encode(message):
-    return (json.dumps(message, ensure_ascii=True, separators=(",", ":")) + "\n").encode("utf-8")
+    text = json.dumps(message, ensure_ascii=True, separators=(",", ":"))
+    text += "\n"  # Fin d'un message.
+    return text.encode("utf-8")
 
 
 class Decoder:
@@ -15,6 +17,7 @@ class Decoder:
         self.buffer = b""
 
     def feed(self, data):
+        # TCP peut livrer un message en plusieurs morceaux : garder le debut.
         self.buffer += data
         messages = []
         while b"\n" in self.buffer:

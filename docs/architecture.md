@@ -8,6 +8,8 @@ Desormais, `main.py` utilise `Simulation` dans `engine.py`. Les positions sont r
 
 Les dossiers restent `interface` et `reseau`. L'ancien scenario et ses huit tests sont conserves pour reference ; ils ne pilotent plus la simulation.
 
+La version simplifiee utilise des rectangles et les widgets Qt standards. Les expressions les plus compactes ont ete detaillees en boucles et conditions ; voir le [parcours de lecture du code](code-simple.md).
+
 ## Repartition des responsabilites
 
 | Module | Responsabilite |

@@ -46,6 +46,7 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | `test_simulation.py` - 11 tests | Feux, transitions, degagement, arbitrage, seuils, ETA, compensation, interruption/reprise, files, arret au rouge et passage au vert. |
 | Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, une seule traversee et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
+| `test_interface.py` - 2 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
 ## Verification sur vos deux VM
@@ -57,6 +58,15 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Verification des deux fenetres en mode graphique hors ecran : etats transmis, reset, minuteur, pause/reprise et vitesse.
 - Lancement des points d'entree `init_db.py`, `centre.py --headless` et `main.py` en processus distincts, avec controle des etats en base MariaDB.
 - Essais supplementaires sur trois graines de trafic a 35 voitures/minute, avec missions repetees sur dix minutes : progression conservee et aucun chevauchement detecte.
+
+### Version simplifiee du 12 octobre 2026
+
+- 27 tests passes sous Python 3.12 avec une vraie base MariaDB de test, sans test ignore.
+- Deux tests Qt ajoutent la verification des commandes et des missions jusqu'au centre TCP.
+- Essai complementaire des deux fenetres avec TCP et MariaDB : missions, reset, pause/reprise et vitesse verifies.
+- Inspection des trois onglets sur une fenetre de 960 x 680 pixels, en rendu hors ecran.
+- Les tests de dix minutes de trafic, priorite, compensation et espacement restent valides.
+- Les essais ont lieu localement ; le lancement sur les deux VM du binome reste a verifier en TP.
 
 ### Grille a realiser en TP
 

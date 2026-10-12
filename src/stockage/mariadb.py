@@ -23,6 +23,8 @@ class MariaDBStore:
             connection.commit()
 
     def save(self, message):
+        # Une transaction regroupe l'historique et l'etat courant.
+        # commit valide ; rollback annule une mise a jour refusee.
         values = (message["id"], message["etat"], message["session"], message["numero"])
         with self.connect() as connection:
             with connection.cursor() as cursor:
@@ -39,6 +41,7 @@ class MariaDBStore:
                     connection.rollback()
                     return False
                 received = datetime.now(timezone.utc).replace(tzinfo=None)
+                # Les %s sont des parametres SQL ; le pilote insere les valeurs.
                 cursor.execute("INSERT INTO historique_etats "
                                "(identifiant, etat, session_id, numero, recu_le) VALUES (%s,%s,%s,%s,%s)",
                                (*values, received))

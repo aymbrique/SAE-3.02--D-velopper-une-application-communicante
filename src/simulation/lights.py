@@ -32,7 +32,9 @@ class Lights:
         return "EW" if self.axis == "NS" else "NS"
 
     def signal(self, axis):
-        return self.phase if axis == self.axis and self.phase != "all_red" else "red"
+        if axis == self.axis and self.phase != "all_red":
+            return self.phase
+        return "red"
 
     @property
     def remaining(self):
@@ -53,14 +55,21 @@ class Lights:
             return f"Compensation - {axis}"
         return f"Cycle normal - {axis}"
 
+    def _priority_order(self, request):
+        return (request.started_at, request.requested_at, request.identifier)
+
     def advance(self, dt, requests=(), busy=False, clear=True):
+        # requests : demandes proches du carrefour ; busy : un secours est occupe.
+        # clear : aucun vehicule n'est encore engage dans le carrefour.
         previous = self.owner
-        current = {request.identifier: request for request in requests}
+        current = []
+        for request in requests:
+            current.append(request.identifier)
         if self.owner and self.owner.identifier not in current:
             self.owner = None
         if self.owner is None and requests:
             # Plus ancienne mission, puis plus ancienne demande, puis identifiant.
-            self.owner = min(requests, key=lambda r: (r.started_at, r.requested_at, r.identifier))
+            self.owner = min(requests, key=self._priority_order)
         if self.compensating and busy:
             self.compensating = False
             self.compensation_budget = 0.0
@@ -84,21 +93,25 @@ class Lights:
             ended = self.elapsed >= duration - 1e-9
             interrupted = self.finish_green and (self.priority_green or self.elapsed >= self.GREEN - 1e-9)
             if not holding and (ended or interrupted):
-                self.phase, self.elapsed = "amber", 0.0
+                self.phase = "amber"
+                self.elapsed = 0.0
                 self.compensating = False
         elif self.phase == "amber":
             self.elapsed += dt
             if self.elapsed >= self.AMBER - 1e-9:
-                self.phase, self.elapsed = "all_red", 0.0
+                self.phase = "all_red"
+                self.elapsed = 0.0
         else:
             self.elapsed += dt
             if self.elapsed >= self.ALL_RED - 1e-9 and clear:
                 self.axis = self.owner.axis if self.owner else self.opposite
                 if not busy and not self.owner:
-                    owed = [axis for axis in (self.axis, self.opposite) if self.debt[axis] > 1e-9]
-                    if owed:
-                        self.axis = owed[0]
-                self.phase, self.elapsed = "green", 0.0
+                    for axis in (self.axis, self.opposite):
+                        if self.debt[axis] > 1e-9:
+                            self.axis = axis
+                            break
+                self.phase = "green"
+                self.elapsed = 0.0
                 self.priority_green = False
                 self.finish_green = False
                 self.compensating = not busy and self.debt[self.axis] > 1e-9

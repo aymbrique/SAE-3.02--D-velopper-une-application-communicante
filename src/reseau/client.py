@@ -11,12 +11,13 @@ from src.reseau.protocol import Decoder, encode
 
 class StateClient:
     def __init__(self, host="127.0.0.1", port=5000):
-        self.host, self.port = host, port
+        self.host = host
+        self.port = port
         self.session = str(uuid4())
         self.numbers = {"01": 0, "02": 0}
-        self.pending = deque()
+        self.pending = deque()  # File : premier message ajoute, premier envoye.
         self.latest = {}
-        self.lock = Lock()
+        self.lock = Lock()  # Protege les donnees partagees avec la fenetre.
         self.stop_event = Event()
         self.thread = None
         self.socket = None
@@ -39,6 +40,7 @@ class StateClient:
             self.status = value
 
     def start(self):
+        # Le thread execute le reseau en parallele pour ne pas figer les boutons.
         self.thread = Thread(target=self._run, name="client-tcp", daemon=True)
         self.thread.start()
 
@@ -86,7 +88,9 @@ class StateClient:
                                 self.pending.append(message)
                     while not self.stop_event.is_set():
                         with self.lock:
-                            message = self.pending[0] if self.pending else None
+                            message = None
+                            if self.pending:
+                                message = self.pending[0]
                         if message:
                             self._exchange(sock, message, decoder)
                             with self.lock:

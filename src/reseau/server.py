@@ -10,7 +10,9 @@ from src.reseau.protocol import Decoder, encode, validate
 
 class CoordinationServer:
     def __init__(self, store, host="0.0.0.0", port=5000):
-        self.store, self.host, self.port = store, host, port
+        self.store = store
+        self.host = host
+        self.port = port
         self.stop_event = Event()
         self.lock = Lock()
         self.thread = None
@@ -22,12 +24,14 @@ class CoordinationServer:
 
     def snapshot(self):
         with self.lock:
-            return {**self.data, "connected": self.connected, "status": self.status,
+            return {"vehicles": self.data["vehicles"], "history": self.data["history"],
+                    "connected": self.connected, "status": self.status,
                     "seen": set(self.seen)}
 
     def _status(self, text, connected=False):
         with self.lock:
-            self.status, self.connected = text, connected
+            self.status = text
+            self.connected = connected
 
     def start(self):
         self.data = self.store.snapshot()
@@ -55,14 +59,20 @@ class CoordinationServer:
         last_seen = monotonic()
         try:
             while not self.stop_event.is_set():
-                readable, _, _ = select.select([self.listener] + ([peer] if peer else []), [], [], 0.2)
+                # Surveiller les nouvelles connexions et le client actif.
+                sockets = [self.listener]
+                if peer is not None:
+                    sockets.append(peer)
+                readable, _, _ = select.select(sockets, [], [], 0.2)
                 if self.listener in readable:
                     candidate, address = self.listener.accept()
                     candidate.settimeout(0.5)
                     if peer:
                         candidate.close()
                     else:
-                        peer, decoder, session = candidate, Decoder(), None
+                        peer = candidate
+                        decoder = Decoder()
+                        session = None
                         with self.lock:
                             self.seen = set()
                         last_seen = monotonic()
@@ -80,6 +90,7 @@ class CoordinationServer:
                                 if session and session != message["session"]:
                                     raise ValueError("Changement de session sur une connexion")
                                 session = message["session"]
+                                # Confirmer seulement apres enregistrement dans MariaDB.
                                 self.store.save(message)
                                 updated = self.store.snapshot()
                                 with self.lock:

@@ -2,6 +2,8 @@
 
 Projet de **Aymeri et Selim**, BUT Reseaux & Telecommunications : une simulation de circulation a Colmar, un centre de coordination distant et une base **MariaDB**.
 
+L'interface utilise des formes simples et les boutons standards de Qt. Pour comprendre le code progressivement : [guide de la version simplifiee](docs/code-simple.md).
+
 ## Commencer
 
 **Suivre le [guide de lancement des deux VM Linux](docs/lancement-linux.md).** Il contient l'installation de Python, MariaDB, la creation de la base, les reglages reseau et les commandes exactes.
