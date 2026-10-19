@@ -1,0 +1,170 @@
+"""Regressions : files tout droit, espacement, degagement et mouvements exclusifs."""
+
+from itertools import combinations
+from math import hypot
+import unittest
+
+from src.simulation.engine import GAP, STEP, Simulation
+
+
+class TrafficFlowTests(unittest.TestCase):
+    def queue(self, sim, origin, count=6):
+        cars = []
+        for index in range(count):
+            car = sim.spawn(origin, "straight")
+            self.assertIsNotNone(car)
+            car.distance = car.crossing[0] - GAP * index
+            cars.append(car)
+        return cars
+
+    def assert_gaps(self, sim):
+        for first, second in combinations(sim.vehicles, 2):
+            distance = hypot(first.position[0] - second.position[0],
+                             first.position[1] - second.position[1])
+            self.assertGreaterEqual(distance, GAP - 1e-6,
+                                    (sim.time, first.identifier, second.identifier))
+
+    def test_two_queues_follow_through_one_green_on_both_axes(self):
+        for first, second, axis in (("N", "S", "NS"), ("E", "W", "EW")):
+            with self.subTest(axis=axis):
+                sim = Simulation(rate=0)
+                sim.lights.axis = axis
+                cars = self.queue(sim, first) + self.queue(sim, second)
+                entered = set()
+                maximum = 0
+                for step in range(159):
+                    sim.advance(STEP)
+                    entered.update(sim.crossing_owners)
+                    maximum = max(maximum, len(sim.crossing_owners))
+                    self.assert_gaps(sim)
+                self.assertEqual(entered, {car.identifier for car in cars})
+                self.assertGreater(maximum, 2)
+                # Les files avancent sans s'arreter derriere leurs leaders.
+                self.assertTrue(all(not car.waiting for car in cars))
+                for step in range(200):
+                    sim.advance(STEP)
+                    self.assert_gaps(sim)
+                self.assertFalse(sim.crossing_owners)
+
+    def test_follower_keeps_moving_when_leader_has_just_left_crossing(self):
+        sim = Simulation(rate=0)
+        leader, follower = self.queue(sim, "N", 2)
+        end = leader.crossing[1]
+        leader.distance = end - .5
+        sim.crossing_owners.add(leader.identifier)
+        follower.distance = follower.crossing[0]
+        sim.advance(STEP)
+        self.assertNotIn(leader.identifier, sim.crossing_owners)
+        self.assertIn(follower.identifier, sim.crossing_owners)
+        self.assertGreater(follower.distance, follower.crossing[0])
+        self.assert_gaps(sim)
+
+    def test_stationary_exit_still_blocks_entry(self):
+        sim = Simulation(rate=0)
+        leader, follower = self.queue(sim, "N", 2)
+        leader.distance = leader.crossing[1] + GAP / 2
+        leader.crossing_index = 1
+        leader.speed = 0
+        follower.distance = follower.crossing[0]
+        sim.advance(1)
+        self.assertEqual(follower.distance, follower.crossing[0])
+        self.assertNotIn(follower.identifier, sim.crossing_owners)
+        self.assert_gaps(sim)
+
+    def test_close_follower_does_not_pause_when_leader_clears_crossing(self):
+        sim = Simulation(rate=0)
+        leader, follower = self.queue(sim, "N", 2)
+        leader.distance = leader.crossing[1] + .5
+        leader.crossing_index = 1
+        follower.distance = leader.distance - GAP
+        sim.crossing_owners.add(follower.identifier)
+        previous = follower.distance
+        sim.advance(STEP)
+        self.assertAlmostEqual(follower.distance - previous, follower.speed * STEP)
+        self.assertAlmostEqual(leader.distance - follower.distance, GAP)
+        self.assertFalse(follower.waiting)
+
+    def test_turning_leader_blocks_straight_follower_until_clear(self):
+        for turn in ("left", "right"):
+            with self.subTest(turn=turn):
+                sim = Simulation(rate=0)
+                leader = sim.spawn("N", turn)
+                leader.distance = leader.crossing[0] + GAP
+                sim.crossing_owners.add(leader.identifier)
+                follower = sim.spawn("N", "straight")
+                follower.distance = follower.crossing[0]
+                sim.advance(STEP)
+                self.assertEqual(follower.distance, follower.crossing[0])
+                self.assertFalse(sim.can_share_crossing(leader, follower))
+                for step in range(200):
+                    sim.advance(STEP)
+                    self.assert_gaps(sim)
+                    if follower.identifier in sim.crossing_owners:
+                        break
+                self.assertIn(follower.identifier, sim.crossing_owners)
+                self.assertNotIn(leader.identifier, sim.crossing_owners)
+
+    def test_convoy_waits_at_orange_and_other_axis_waits_until_everyone_leaves(self):
+        sim = Simulation(rate=0)
+        leader, follower, stopped = self.queue(sim, "N", 3)
+        stop = leader.crossing[0]
+        leader.distance = stop + 2 * GAP
+        follower.distance = stop + GAP
+        stopped.distance = stop
+        sim.crossing_owners.update((leader.identifier, follower.identifier))
+        sim.lights.phase = "amber"
+        other = sim.spawn("E", "straight")
+        other.distance = other.crossing[0]
+        for step in range(200):
+            occupied_before = bool(sim.crossing_owners)
+            sim.advance(STEP)
+            self.assert_gaps(sim)
+            self.assertEqual(stopped.distance, stop)
+            if occupied_before:
+                self.assertEqual(other.distance, other.crossing[0])
+            if other.identifier in sim.crossing_owners:
+                break
+        self.assertIn(other.identifier, sim.crossing_owners)
+        self.assertNotIn(leader.identifier, sim.crossing_owners)
+        self.assertNotIn(follower.identifier, sim.crossing_owners)
+
+    def test_rescue_does_not_share_the_crossing_with_a_convoy(self):
+        sim = Simulation(rate=0)
+        leader, follower = self.queue(sim, "N", 2)
+        sim.start_mission("01", "S")
+        rescue = sim.get_rescue("01")
+        rescue.distance = rescue.crossing[0]
+        leader.distance = leader.crossing[0] + 2 * GAP
+        follower.distance = follower.crossing[0] + GAP
+        sim.crossing_owners.update((leader.identifier, follower.identifier))
+        sim.advance(STEP)
+        self.assertEqual(rescue.distance, rescue.crossing[0])
+        self.assertNotIn(rescue.identifier, sim.crossing_owners)
+        self.assertFalse(sim.can_share_crossing(leader, rescue))
+        self.assert_gaps(sim)
+
+    def test_rescue_waits_before_crossing_when_destination_access_is_occupied(self):
+        sim = Simulation(rate=0)
+        sim.start_mission("01", "E")
+        rescue = sim.get_rescue("01")
+        rescue.distance = rescue.crossing[0]
+        blocker = sim.spawn("E", "straight")
+        blocker.distance = blocker.crossing[0]
+        blocker.speed = 0
+        arriving = sim.spawn("E", "straight")
+        self.assertEqual(sim._access_owner("E"), rescue.identifier)
+        self.assertFalse(sim._exit_clear(rescue))
+        self.assertEqual(sim.requests(), [])
+        sim.advance(2)
+        self.assertEqual(rescue.distance, rescue.crossing[0])
+        self.assertLessEqual(arriving.distance, 25)
+        sim.cars.remove(blocker)
+        self.assertTrue(sim._exit_clear(rescue))
+        self.assertEqual(len(sim.requests()), 1)
+        sim.advance(120)
+        self.assertFalse(rescue.busy)
+        self.assert_gaps(sim)
+
+
+if __name__ == "__main__":
+    unittest.main()

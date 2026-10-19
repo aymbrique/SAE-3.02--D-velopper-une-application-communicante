@@ -40,18 +40,20 @@ class TrafficChangesTests(unittest.TestCase):
         sim.advance(.5)
         self.assertEqual(red.distance, red.crossing[0])
 
-    def test_eighty_ten_ten_turn_selection(self):
+    def test_ninety_five_percent_straight_turn_selection(self):
         sim = Simulation(rate=0)
         counts = Counter(sim.choose_turn() for _ in range(10000))
-        self.assertTrue(7800 < counts["straight"] < 8200, counts)
-        self.assertTrue(800 < counts["left"] < 1200, counts)
-        self.assertTrue(800 < counts["right"] < 1200, counts)
+        self.assertTrue(9350 < counts["straight"] < 9650, counts)
+        self.assertTrue(150 < counts["left"] < 350, counts)
+        self.assertTrue(150 < counts["right"] < 350, counts)
         # Verifier aussi le tirage utilise lors de la creation de vraies voitures.
         counts = Counter()
         for index in range(1000):
             sim.cars.clear()
             counts[sim.spawn().turn] += 1
-        self.assertTrue(740 < counts["straight"] < 860, counts)
+        self.assertTrue(920 < counts["straight"] < 980, counts)
+        self.assertGreater(counts["left"], 0, counts)
+        self.assertGreater(counts["right"], 0, counts)
 
     def test_routes_reach_all_points_and_return_to_parking(self):
         for identifier, y in (("01", 245), ("02", 305)):
@@ -107,9 +109,8 @@ class TrafficChangesTests(unittest.TestCase):
                     for vehicle in sim.vehicles:
                         if vehicle.identifier in sim.crossing_owners:
                             inside.append(vehicle)
-                    self.assertLessEqual(len(inside), 2)
-                    if len(inside) == 2:
-                        self.assertTrue(sim.can_share_crossing(*inside))
+                    for a, b in combinations(inside, 2):
+                        self.assertTrue(sim.can_share_crossing(a, b))
                     if all(not v.busy for v in sim.rescues):
                         break
                 self.assertTrue(all(not v.busy for v in sim.rescues))

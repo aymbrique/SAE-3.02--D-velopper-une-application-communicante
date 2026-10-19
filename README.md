@@ -21,9 +21,9 @@ Les programmes restent separes : le client joint le centre sur **127.0.0.1:5000*
 ## Fonctions implementees
 
 - Carte 2D sur fond vert, zoom, deplacement, affichage des trajets et compteurs.
-- Generation de voitures : 12/min par defaut, reglage de 0 a 60/min, 25 voitures au maximum, 80 % de chances d'aller tout droit, 10 % a gauche et 10 % a droite.
+- Generation de voitures : 12/min par defaut, reglage de 0 a 60/min, 25 voitures au maximum, 95 % de chances d'aller tout droit, 2,5 % a gauche et 2,5 % a droite.
 - Deplacement calcule a chaque pas de simulation, arret aux feux, files et espacement minimal. Une voiture engagee finit sa traversee.
-- Cycle normal 8 s de vert, 1 s d'orange, au moins 1 s de rouge simultane. Deux voitures opposees allant tout droit peuvent traverser ensemble ; les autres mouvements restent exclusifs.
+- Cycle normal 8 s de vert, 1 s d'orange, au moins 1 s de rouge simultane. Les voitures allant tout droit sur le meme axe peuvent traverser ensemble, en sens opposes et en file avec un ecart minimal de 44 unites. Les virages et les secours restent exclusifs.
 - Choix du secours 01 ou 02 et du point Nord, Sud, Est ou Ouest ; trajet aller/intervention/retour, etats disponibles/occupes et estimations de duree. Le point Nord ne demande pas de traverser le carrefour.
 - Demande de priorite a 150 m ou moins **ou** 10 s d'arrivee ou moins. Arbitrage par anciennete de mission, puis de demande, puis identifiant ; maintien jusqu'a la sortie.
 - Memorisation du vert supplementaire, compensation uniquement quand tous les secours sont disponibles, vert compensatoire de 16 s maximum et suspension/reprise lors d'une nouvelle mission.
@@ -76,7 +76,7 @@ python -m unittest discover -s tests -v
 
 Les tests MariaDB sont actives uniquement avec une base de test dediee : voir [validation](docs/validation.md). Les essais automatises ne remplacent pas la verification du reseau, de l'affichage et du pare-feu sur votre VM.
 
-Le modele reste volontairement simple : partage du carrefour limite aux voitures opposees allant tout droit, acces lateraux reserves temporairement pour les secours, vitesses constantes et durees estimees hors attente. Le protocole est destine au reseau de TP, sans authentification ni chiffrement. Les messages non confirmes restent en memoire du client jusqu'a la reconnexion ; fermer ce client avant leur envoi perd cette file.
+Le modele reste volontairement simple : partage du carrefour limite aux files de voitures allant tout droit sur le meme axe, acces lateraux reserves temporairement pour les secours, vitesses constantes et durees estimees hors attente. Le protocole est destine au reseau de TP, sans authentification ni chiffrement. Les messages non confirmes restent en memoire du client jusqu'a la reconnexion ; fermer ce client avant leur envoi perd cette file.
 
 Le [cahier des charges](docs/Cahier_des_charges_SAE302.pdf) reste la reference. Le stockage MariaDB et le lancement sur une VM completent ce document a la demande du binome.
 

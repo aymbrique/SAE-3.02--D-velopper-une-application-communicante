@@ -1,4 +1,4 @@
-"""Simulation a pas fixe. Deux voitures opposees allant tout droit peuvent passer ensemble."""
+"""Simulation a pas fixe. Les files tout droit compatibles peuvent passer ensemble."""
 
 from math import hypot, inf, isfinite
 from random import Random
@@ -71,11 +71,11 @@ class Simulation:
         return events
 
     def choose_turn(self):
-        # 8 nombres sur 10 : tout droit ; 1 : gauche ; 1 : droite.
-        choice = self.random.randrange(10)
-        if choice < 8:
+        # 95 % tout droit ; les 5 % restants sont repartis entre les virages.
+        choice = self.random.randrange(200)
+        if choice < 190:
             return "straight"
-        if choice == 8:
+        if choice < 195:
             return "left"
         return "right"
 
@@ -157,14 +157,16 @@ class Simulation:
         self.cars = remaining_cars
 
     def _movement_order(self, vehicle):
-        # Le vehicule engage passe d'abord, puis celui qui a le plus avance.
-        engaged = vehicle.identifier in self.crossing_owners
-        return (not engaged, -vehicle.distance, vehicle.identifier)
+        # Degager d'abord les sorties aussi : un leader deja sorti doit avancer
+        # avant la voiture qui le suit encore dans le carrefour, sans micro-arret.
+        clearing = (vehicle.identifier in self.crossing_owners
+                    or (vehicle.kind == "car" and vehicle.crossing is None))
+        return (not clearing, -vehicle.distance, vehicle.identifier)
 
-    def _clear_path(self, vehicle, target):
+    def _clear_path(self, vehicle, target, ignored=()):
         x, y, _ = vehicle.route.sample(target)
         for other in self.vehicles:
-            if other is vehicle:
+            if other is vehicle or other.identifier in ignored:
                 continue
             ox, oy, _ = other.position
             if hypot(x - ox, y - oy) < GAP - 1e-7:
@@ -172,12 +174,19 @@ class Simulation:
         return True
 
     def can_share_crossing(self, first, second):
-        """Seules deux voitures opposees allant tout droit partagent le carrefour."""
+        """Les files tout droit du meme axe peuvent avancer en parallele."""
         return (first.kind == "car" and second.kind == "car"
                 and first.turn == "straight" and second.turn == "straight"
-                and OPPOSITE.get(first.origin) == second.origin)
+                and first.origin in OPPOSITE
+                and second.origin in (first.origin, OPPOSITE[first.origin]))
 
     def _exit_clear(self, vehicle):
+        # Avant l'aller, degager aussi la voie que le secours croisera pres de
+        # son intervention. Sinon il pourrait attendre sur la sortie, retenir
+        # tout un convoi dans le carrefour et empecher cette voie de passer au vert.
+        if (vehicle.kind != "car" and vehicle.crossing_index == 0
+                and self._side_access_occupied(vehicle.destination)):
+            return False
         stop, end, axis = vehicle.crossing
         for offset in range(0, 46, 6):
             if not self._clear_path(vehicle, end + offset):
@@ -194,9 +203,22 @@ class Simulation:
             return False
         if vehicle.kind != "car" and self.lights.owner and self.lights.owner.identifier != vehicle.identifier:
             return False
-        # Ne pas engager un vehicule si sa sortie est bouchee.
+        if vehicle.kind != "car" and not self._exit_clear(vehicle):
+            return False
+        # Une voiture deja engagee et en mouvement ne bouche pas tout le trajet
+        # des suivantes tout droit. Cela vaut aussi lorsqu'elle vient de sortir.
+        # Les vehicules arretes, les virages et les secours restent des obstacles.
+        following = set()
+        for other in self.vehicles:
+            if (other is not vehicle and self.can_share_crossing(vehicle, other)
+                    and other.speed > 0 and not other.waiting
+                    and other.distance > other.crossings[0][0]):
+                following.add(other.identifier)
+        # Ce controle global reserve toujours une sortie non bouchee. Le controle
+        # de chaque deplacement dans _move ne saute aucun vehicule : GAP reste
+        # obligatoire, meme avec plusieurs voitures engagees sur la meme voie.
         for offset in range(0, int(end - stop) + 46, 6):
-            if not self._clear_path(vehicle, stop + offset):
+            if not self._clear_path(vehicle, stop + offset, following):
                 return False
         return True
 
@@ -242,7 +264,9 @@ class Simulation:
             if not rescue.busy:
                 continue
             for start, guard, end, access_side in rescue.route.accesses:
-                if access_side == side and start <= rescue.distance < end:
+                preparing = (side == rescue.destination and bool(rescue.crossings)
+                             and not rescue.visited and rescue.distance < start)
+                if access_side == side and (preparing or start <= rescue.distance < end):
                     # Un secours deja engage finit avant celui qui attend.
                     engaged = rescue.distance > guard
                     candidates.append((not engaged, rescue.started_at, rescue.identifier))

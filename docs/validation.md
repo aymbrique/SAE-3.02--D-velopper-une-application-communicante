@@ -44,9 +44,10 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 |---|---|
 | `test_demo.py` - 8 tests historiques | Geometrie et chronologie de l'ancienne demonstration. |
 | `test_simulation.py` - 11 tests | Feux, transitions, degagement, arbitrage, seuils, ETA, compensation, interruption/reprise, files, arret au rouge et passage au vert. |
-| Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, deux traversees opposees compatibles au maximum et progression du trafic. |
+| Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, plusieurs traversees tout droit compatibles sur le meme axe et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
-| `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 80/10/10, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
+| `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 95/2,5/2,5, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
+| `test_traffic_flow.py` - 8 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, virages et secours exclusifs, sortie bouchee et reservation anticipee de l'acces secours. |
 | `test_interface.py` - 2 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
@@ -78,6 +79,17 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Regression pour une sortie bouchee : la demande de priorite attend que la sortie puisse se degager ; un secours deja engage conserve sa priorite.
 - Essais des commandes Qt et du lien avec le centre ; lancement des programmes avec MariaDB locale.
 - Deploiement retenu : une seule VM, simulation et centre separes, connexion TCP sur 127.0.0.1:5000.
+
+### Fluidification du 19 octobre 2026
+
+- Base de travail : derniere version GitHub `fc1f302f6f5cdb5852efe4b55eeb5d14c4b94e08`, avec les quatre destinations et le deploiement sur une VM.
+- Tirage des voitures : 95 % tout droit, 2,5 % gauche et 2,5 % droite.
+- 26 tests de circulation passes sous Python 3.13 : 11 tests de simulation/feux, 7 de destinations et 8 nouvelles regressions de fluidite.
+- Sur deux files preparees de six voitures tout droit, les 12 voitures s'engagent avant l'orange, contre 2 avec la version precedente. Essai reproduit sur Nord-Sud et Est-Ouest. Il mesure la capacite d'une file preparee, pas le nombre garanti a chaque cycle en trafic aleatoire.
+- GAP = 44 reste verifie a chaque pas ; les virages et les secours restent exclusifs. Une sortie arretee retient les nouveaux vehicules et le changement d'axe attend tous les vehicules engages.
+- Les 16 couples de destinations des secours ont ete testes avec du trafic a 40/min. La reservation anticipee de l'acces destination evite de bloquer la sortie du carrefour en attendant une voie entrante.
+- Verification graphique locale hors ecran : affichage des convois sur les deux axes, lecture, pause et reinitialisation.
+- Les modules TCP/MariaDB n'ont pas ete modifies ; les essais d'integration SQL n'ont pas ete rejoues pour cette modification du moteur.
 
 ### Grille a realiser en TP
 

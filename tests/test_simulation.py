@@ -163,9 +163,8 @@ class SimulationTests(unittest.TestCase):
                         distance = hypot(a.position[0] - b.position[0], a.position[1] - b.position[1])
                         self.assertGreaterEqual(distance, GAP - 1e-6, (sim.time, a.identifier, b.identifier))
                     inside = [v for v in sim.vehicles if v.crossing and v.crossing[0] < v.distance < v.crossing[1]]
-                    self.assertLessEqual(len(inside), 2)
-                    if len(inside) == 2:
-                        self.assertTrue(sim.can_share_crossing(*inside))
+                    for a, b in combinations(inside, 2):
+                        self.assertTrue(sim.can_share_crossing(a, b))
                     if step == 1079:
                         previous = sim.completed
                 self.assertGreater(sim.completed, previous)

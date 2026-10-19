@@ -33,8 +33,8 @@ La simulation et le centre restent **deux programmes séparés**, même sur une 
 - Quatre points : Nord, Sud, Est et Ouest. Les deux véhicules peuvent être envoyés vers n'importe lequel.
 - Le point Nord est du côté de la caserne : son trajet ne traverse pas le carrefour central.
 - Une mission déjà commencée conserve sa destination. Un véhicule occupé ne peut pas être envoyé de nouveau.
-- À chaque choix aléatoire de direction : 80 % tout droit, 10 % à gauche et 10 % à droite. Un petit échantillon n'aura pas forcément exactement ces proportions.
-- Deux voitures venant de directions opposées et allant tout droit peuvent traverser ensemble au vert. Les virages et les secours restent contrôlés séparément.
+- À chaque choix aléatoire de direction : 95 % tout droit, 2,5 % à gauche et 2,5 % à droite. Un petit échantillon n'aura pas forcément exactement ces proportions.
+- Les voitures allant tout droit sur le même axe peuvent traverser ensemble au vert, dans les deux sens et en file. Chaque suivante conserve au moins 44 unités entre centres, sans attendre la sortie complète de son leader. Les virages et les secours restent contrôlés séparément.
 - Une sortie encombrée ou un accès réservé peut obliger à attendre même au vert. Un secours ne maintient pas une priorité avant d'entrer si sa sortie est bloquée.
 - Pause, reprise, vitesse, débit, affichage des trajets et remise à zéro restent disponibles.
 
@@ -188,7 +188,7 @@ Ce mode conserve les données dans MariaDB mais n'affiche pas le tableau. L'arr�
 3. Choisir 02, puis Ouest et envoyer pendant la première mission.
 4. Dans **Secours**, lire les destinations et les étapes. Dans **Afficher un trajet**, sélectionner un des huit parcours de secours pour le visualiser.
 5. Attendre les retours : les deux états redeviennent disponibles. Tester aussi Nord et Sud.
-6. Observer deux voitures opposées allant tout droit : elles peuvent être engagées simultanément. Un arrêt au rouge, une file ou un secours peut naturellement empêcher cette situation à un instant donné.
+6. Observer les files allant tout droit : les voitures opposées et leurs suivantes peuvent être engagées simultanément, avec les distances de sécurité conservées. Un arrêt au rouge, une file ou un secours peut naturellement empêcher cette situation à un instant donné.
 7. Tester pause/reprise, vitesses et Recommencer. Les feux et les missions restent cohérents.
 8. Fermer puis rouvrir le centre en laissant la simulation ouverte : elle se reconnecte et renvoie les messages en attente.
 9. Consulter l'historique SQL pour vérifier la persistance.
