@@ -4,7 +4,7 @@ Cette version conserve les fonctions du projet avec une presentation plus sobre 
 
 ## Ce qui a ete simplifie
 
-- Carte : deux routes grises, des lignes blanches et quatre ronds colores pour les feux.
+- Carte : deux routes grises, des lignes blanches et quatre ronds colores pour les feux, sur un fond vert.
 - Vehicules : rectangles bleus pour les voitures, rouge pour le pompier 01, blanc pour l'ambulance 02. Le survol indique leur situation.
 - Fenetre : boutons Qt standards, sans feuille de style, ombres, arbres, facades ou dessins detailles de vehicules.
 - Informations : trois onglets Trafic, Secours et Reseau, plutot qu'une longue barre laterale.
@@ -12,7 +12,7 @@ Cette version conserve les fonctions du projet avec une presentation plus sobre 
 - Trajet : une classe avec un constructeur ordinaire ; une boucle cherche le segment sur lequel se trouve le vehicule.
 - Moteur : les controles des acces lateraux ont leurs propres fonctions. Les callbacks des boutons sont des methodes nommees.
 
-Les routes, les vitesses, les regles de priorite et de compensation restent les memes. Le reseau conserve la reconnexion et les confirmations de reception. MariaDB conserve l'etat courant et l'historique. Le dessin n'utilise plus les couleurs individuelles des voitures, ni le clignotement decoratif des gyrophares.
+Les missions proposent maintenant quatre destinations ; la circulation permet le croisement simultane de deux voitures opposees allant tout droit. Les vitesses et la compensation sont conservees. Le reseau conserve la reconnexion et les confirmations de reception. MariaDB conserve l'etat courant et l'historique. Le dessin n'utilise plus les couleurs individuelles des voitures, ni le clignotement decoratif des gyrophares.
 
 ## Dans quel ordre lire les fichiers ?
 
@@ -40,14 +40,14 @@ Les routes, les vitesses, les regles de priorite et de compensation restent les 
 | `self` | Designe l'objet courant, par exemple la fenetre ouverte. |
 | Signal Qt | `button.clicked.connect(...)` relie un clic a une methode. |
 | Minuteur | `QTimer` appelle `_tick` environ toutes les 30 millisecondes. |
-| Socket TCP | Transporte les etats entre les deux VM. |
+| Socket TCP | Transporte les etats entre les deux programmes sur la meme VM. |
 | JSON | Transforme un dictionnaire Python en texte transmissible. |
 | SQL | Insere et lit les etats dans MariaDB. |
 
 ## Suivre une mission dans le code
 
-1. Un clic sur le bouton 01 appelle `_send_01`.
-2. Cette methode appelle `start_mission("01")` dans la fenetre.
+1. Choisir un vehicule et une destination, puis cliquer sur Envoyer appelle `_send_selected`.
+2. Cette methode appelle `start_mission("01", "E")` dans la fenetre pour les pompiers vers l'Est.
 3. La fenetre demande au moteur de marquer le secours occupe.
 4. Le moteur ajoute un evenement `("01", "occupe")` dans sa liste.
 5. `_publish_events` transmet cet evenement au client TCP si le mode connecte est actif.

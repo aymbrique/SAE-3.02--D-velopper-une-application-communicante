@@ -1,28 +1,30 @@
 # SAE302 - Circulation, secours et coordination
 
-Projet de **Aymeri et Selim**, BUT Reseaux & Telecommunications : une simulation de circulation a Colmar, un centre de coordination distant et une base **MariaDB**.
+Projet de **Aymeri et Selim**, BUT Reseaux & Telecommunications : une simulation de circulation a Colmar, un centre de coordination TCP et une base **MariaDB**.
 
 L'interface utilise des formes simples et les boutons standards de Qt. Pour comprendre le code progressivement : [guide de la version simplifiee](docs/code-simple.md).
 
 ## Commencer
 
-**Suivre le [guide de lancement des deux VM Linux](docs/lancement-linux.md).** Il contient l'installation de Python, MariaDB, la creation de la base, les reglages reseau et les commandes exactes.
+**Suivre le [guide de deploiement sur une VM Linux](docs/deploiement-une-vm.md).** Il explique le fonctionnement, les sockets locales, MariaDB, l'installation, PyCharm et les verifications.
 
-| Machine | Programme | Role |
+Une seule VM avec bureau graphique heberge tout le projet :
+
+| Element | Commande | Role |
 |---|---|---|
-| VM 1 | `python main.py --host IP_VM2` | Simulation graphique et client TCP |
-| VM 2 | `python centre.py` | Centre de coordination, serveur TCP et acces MariaDB |
-| VM 2 | Service MariaDB | Dernier etat des secours et historique durable |
+| Simulation | `python main.py` | Carte et client TCP |
+| Centre | `python centre.py` | Serveur TCP et affichage du suivi |
+| MariaDB | Service Linux `mariadb` | Derniers etats et historique durable |
 
-Le port applicatif est **5000/TCP**. MariaDB reste sur **127.0.0.1:3306**, accessible localement par le centre. La VM 1 ne se connecte pas directement a MariaDB.
+Les programmes restent separes : le client joint le centre sur **127.0.0.1:5000**, puis le centre joint MariaDB sur **127.0.0.1:3306**. Le centre ecoute en local par defaut. Les sockets fonctionnent aussi entre deux programmes d'une meme machine.
 
 ## Fonctions implementees
 
-- Carte 2D, zoom, deplacement, affichage des trajets et compteurs.
-- Generation de voitures : 12/min par defaut, reglage de 0 a 60/min, 25 voitures au maximum, trois directions possibles.
+- Carte 2D sur fond vert, zoom, deplacement, affichage des trajets et compteurs.
+- Generation de voitures : 12/min par defaut, reglage de 0 a 60/min, 25 voitures au maximum, 80 % de chances d'aller tout droit, 10 % a gauche et 10 % a droite.
 - Deplacement calcule a chaque pas de simulation, arret aux feux, files et espacement minimal. Une voiture engagee finit sa traversee.
-- Cycle normal 8 s de vert, 1 s d'orange, au moins 1 s de rouge simultane. Un seul vehicule traverse le carrefour a la fois.
-- Deux secours declenchables separement, trajet aller/intervention/retour, etats disponibles/occupes et estimations de duree.
+- Cycle normal 8 s de vert, 1 s d'orange, au moins 1 s de rouge simultane. Deux voitures opposees allant tout droit peuvent traverser ensemble ; les autres mouvements restent exclusifs.
+- Choix du secours 01 ou 02 et du point Nord, Sud, Est ou Ouest ; trajet aller/intervention/retour, etats disponibles/occupes et estimations de duree. Le point Nord ne demande pas de traverser le carrefour.
 - Demande de priorite a 150 m ou moins **ou** 10 s d'arrivee ou moins. Arbitrage par anciennete de mission, puis de demande, puis identifiant ; maintien jusqu'a la sortie.
 - Memorisation du vert supplementaire, compensation uniquement quand tous les secours sont disponibles, vert compensatoire de 16 s maximum et suspension/reprise lors d'une nouvelle mission.
 - TCP en threads, JSON delimite par lignes, numeros de mise a jour, accuses de reception, reconnexion et suivi des coupures sans changement automatique de l'etat metier.
@@ -39,15 +41,15 @@ python -m pip install -r requirements.txt
 python main.py --local
 ```
 
-Cliquer sur **Demarrer**, puis sur **Envoyer le secours 01** ou **02**. Le mode `--local` n'a besoin ni de MariaDB ni du centre, mais ne valide pas la communication.
+Cliquer sur **Demarrer**, choisir le vehicule et le point d'intervention, puis **Envoyer en intervention**. Le mode `--local` n'a besoin ni de MariaDB ni du centre, mais ne valide pas la communication.
 
-Pour une installation complete ou un essai des deux programmes sur un seul PC, suivre le [guide](docs/lancement-linux.md).
+Pour une installation complete ou un essai des deux programmes sur un seul PC, suivre le [guide](docs/deploiement-une-vm.md).
 
 ## Organisation
 
 ```text
-main.py                          Application de simulation (VM 1)
-centre.py                        Centre TCP, graphique ou sans fenetre (VM 2)
+main.py                          Application de simulation (VM unique)
+centre.py                        Centre TCP, graphique ou sans fenetre (meme VM)
 init_db.py                       Creation des tables MariaDB
 config.example.ini               Exemple de configuration sans mot de passe
 src/config.py                    Lecture de la configuration locale
@@ -72,12 +74,12 @@ L'ancien `src/simulation/demo.py` est conserve comme scenario historique avec se
 python -m unittest discover -s tests -v
 ```
 
-Les tests MariaDB sont actives uniquement avec une base de test dediee : voir [validation](docs/validation.md). Les essais automatises ne remplacent pas la verification du reseau, de l'affichage et du pare-feu sur vos deux VM.
+Les tests MariaDB sont actives uniquement avec une base de test dediee : voir [validation](docs/validation.md). Les essais automatises ne remplacent pas la verification du reseau, de l'affichage et du pare-feu sur votre VM.
 
-Le modele reste volontairement simple : un seul passage dans le carrefour, acces lateraux reserves temporairement pour les secours, vitesses constantes et durees estimees hors attente. Le protocole est destine au reseau de TP, sans authentification ni chiffrement. Les messages non confirmes restent en memoire du client jusqu'a la reconnexion ; fermer ce client avant leur envoi perd cette file.
+Le modele reste volontairement simple : partage du carrefour limite aux voitures opposees allant tout droit, acces lateraux reserves temporairement pour les secours, vitesses constantes et durees estimees hors attente. Le protocole est destine au reseau de TP, sans authentification ni chiffrement. Les messages non confirmes restent en memoire du client jusqu'a la reconnexion ; fermer ce client avant leur envoi perd cette file.
 
-Le [cahier des charges](docs/Cahier_des_charges_SAE302.pdf) reste la reference. Le stockage MariaDB et le lancement sur deux VM completent ce document a la demande du binome.
+Le [cahier des charges](docs/Cahier_des_charges_SAE302.pdf) reste la reference. Le stockage MariaDB et le lancement sur une VM completent ce document a la demande du binome.
 
 - [Utiliser les deux interfaces](docs/interface.md)
 - [Comprendre le code et les changements](docs/architecture.md)
-- [Tests et verification sur les VM](docs/validation.md)
+- [Tests et verification sur la VM](docs/validation.md)

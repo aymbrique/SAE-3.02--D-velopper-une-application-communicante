@@ -11,7 +11,7 @@ from src.reseau.client import StateClient
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simulation de trafic - VM 1")
+    parser = argparse.ArgumentParser(description="Simulation de trafic - connexion TCP locale")
     parser.add_argument("--config", help="Fichier INI local")
     parser.add_argument("--host", help="Adresse IP du centre")
     parser.add_argument("--port", type=int, help="Port TCP du centre")

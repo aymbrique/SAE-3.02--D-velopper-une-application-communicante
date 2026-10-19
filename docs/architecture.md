@@ -4,6 +4,8 @@
 
 La premiere version etait une animation : chaque vehicule avait des horaires de depart et d'attente prepares dans `demo.py`. Le panneau de coordination lisait les memes objets Python que la simulation.
 
+Le deploiement retenu lance les deux programmes sur une meme VM, relies par TCP sur 127.0.0.1:5000.
+
 Desormais, `main.py` utilise `Simulation` dans `engine.py`. Les positions sont recalculees suivant la vitesse, les feux, les autres vehicules et les reservations de passage. `centre.py` est un autre programme : il apprend les etats uniquement par TCP et les conserve dans MariaDB.
 
 Les dossiers restent `interface` et `reseau`. L'ancien scenario et ses huit tests sont conserves pour reference ; ils ne pilotent plus la simulation.
@@ -33,9 +35,9 @@ La version simplifiee utilise des rectangles et les widgets Qt standards. Les ex
 
 Une unite graphique represente **0,5 metre**. Les vitesses nominales sont de 28 unites/s pour les voitures (14 m/s) et 40 pour les secours (20 m/s). Ce sont des choix de simulation, pas une modelisation de conduite reelle.
 
-Le debit indique un intervalle de generation de `60 / debit` secondes. L'origine et le virage sont tires avec un generateur pseudoaleatoire reproductible. Une entree occupee ou la limite de 25 voitures reporte la possibilite d'apparition au prochain intervalle ; il n'y a pas de rattrapage en rafale.
+Le debit indique un intervalle de generation de `60 / debit` secondes. L'origine est tiree uniformement ; le virage utilise 80 % tout droit, 10 % gauche et 10 % droite avec un generateur pseudoaleatoire reproductible. Une entree occupee ou la limite de 25 voitures reporte la possibilite d'apparition au prochain intervalle ; il n'y a pas de rattrapage en rafale.
 
-La distance minimale entre centres est de **44 unites**, superieure aux dimensions des formes dessinees. Le carrefour est reserve a un seul vehicule depuis son engagement jusqu'au degagement de sa partie arriere. La sortie doit aussi etre libre avant l'engagement.
+La distance minimale entre centres est de **44 unites**, superieure aux dimensions des formes dessinees. Le moteur conserve l'ensemble `crossing_owners` des vehicules engages. Deux voitures allant tout droit depuis des origines opposees peuvent partager le carrefour ; les virages et les secours restent exclusifs. Le changement d'axe attend le degagement de tous les vehicules engages. La sortie doit aussi etre libre avant l'engagement.
 
 Les acces a la caserne et au point d'intervention croisent des voies hors du carrefour principal. Une reservation temporaire retient les nouvelles arrivees en amont, laisse sortir les voitures deja dans la zone et autorise ensuite le secours. Cela evite un blocage mutuel entre un secours qui tourne et une voiture qui arrive lateralement.
 
@@ -43,13 +45,13 @@ Ce choix conservateur limite le debit maximal. Une voiture peut attendre au vert
 
 ## Missions et feux
 
-Chaque secours a sa propre heure de depart, sa distance sur le parcours et son etat. Les deux peuvent etre occupes en meme temps. Le trajet passe par l'intervention, attend 8 secondes puis retourne a la caserne. Le compteur des trajets termines comprend les sorties des voitures et les missions achevees.
+Chaque secours a sa propre heure de depart, sa distance sur le parcours, sa destination et son etat. `rescue_route` construit un trajet vers Nord, Sud, Est ou Ouest. Nord reste du cote de la caserne sans passage central ; les autres trajets ont deux passages, dont le retour peut demander l'axe Est-Ouest. Les deux peuvent etre occupes en meme temps. Le trajet passe par l'intervention, attend 8 secondes puis retourne a la caserne. Le compteur des trajets termines comprend les sorties des voitures et les missions achevees.
 
 L'ETA est la distance restante sur le trajet jusqu'a la prochaine ligne d'arret, divisee par la vitesse nominale. Il n'inclut pas la prediction des files. A vitesse nulle, l'ETA est infini ; le critere de distance reste applicable.
 
 Seuls les secours ayant atteint 150 m ou moins, ou 10 s ou moins, deposent une demande. Sur cette petite carte, le depart de la caserne se trouve deja dans ce seuil. Le code et les tests couvrent aussi un secours hors seuil.
 
-L'ordre des demandes est : depart de mission le plus ancien, demande la plus ancienne, identifiant le plus petit. Le choix reste verrouille jusqu'a la sortie, meme si une demande plus ancienne arrive ensuite. Un second secours en sens oppose attend meme si l'axe est vert.
+L'ordre des demandes est : depart de mission le plus ancien, demande la plus ancienne, identifiant le plus petit. Le choix reste verrouille jusqu'a la sortie pendant la traversee. Avant l'engagement, une sortie bouchee suspend la demande afin que l'autre axe puisse se degager. Une demande plus ancienne ne remplace pas une priorite admissible en cours. Un second secours en sens oppose attend meme si l'axe est vert.
 
 Un changement d'axe passe par 1 seconde d'orange puis au moins 1 seconde de rouge simultane. Le rouge se prolonge si un vehicule est encore engage. Une priorite sur l'axe deja vert peut prolonger ce vert ; deux secours successifs sur cet axe n'en reinitialisent pas la duree.
 
@@ -77,7 +79,7 @@ La file d'attente du client est en memoire : elle survit a une coupure reseau ta
 
 ## MariaDB
 
-PyMySQL est le pilote Python utilise pour joindre **MariaDB**, pas une autre base. MariaDB est un service de la VM 2 ; elle n'est pas un simple fichier du depot.
+PyMySQL est le pilote Python utilise pour joindre **MariaDB**, pas une autre base. MariaDB est un service de la VM unique ; elle n'est pas un simple fichier du depot.
 
 | Table | Contenu | Cle |
 |---|---|---|
@@ -92,6 +94,8 @@ La liaison n'est pas un etat metier stocke dans ces tables : elle est calculee p
 
 ## Ajouts hors du PDF initial
 
-Le PDF initial ne precisait pas la base de donnees. MariaDB et son historique ont ete ajoutes sur demande du binome. Le centre est maintenant executable separement pour l'utilisation sur deux VM Linux. Le systeme reste limite a un carrefour, deux secours et un centre.
+Le PDF initial ne precisait pas la base de donnees. MariaDB et son historique ont ete ajoutes sur demande du binome. Le centre est maintenant executable separement pour l'utilisation sur une VM Linux. Le systeme reste limite a un carrefour, deux secours et un centre.
 
-L'installation de vos VM, la validation sur leur reseau reel et la demonstration au professeur restent a effectuer avec le [guide](lancement-linux.md) et la [grille de validation](validation.md).
+L'installation de votre VM, la validation sur son environnement reel et la demonstration au professeur restent a effectuer avec le [guide](deploiement-une-vm.md) et la [grille de validation](validation.md).
+
+La destination reste locale au moteur et a l'interface ; le protocole TCP et les tables MariaDB continuent de conserver les etats, les numeros et les sessions.

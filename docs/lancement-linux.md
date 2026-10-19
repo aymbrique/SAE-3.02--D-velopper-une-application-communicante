@@ -1,4 +1,6 @@
-# Guide de lancement sur deux VM Linux
+# Ancien guide : lancement optionnel sur deux VM Linux
+
+**Le deploiement retenu utilise maintenant une seule VM. Suivre [le nouveau guide](deploiement-une-vm.md).** Cette variante a deux machines est conservee pour reference.
 
 ## 1. Repartition
 
@@ -137,12 +139,12 @@ Le mot de passe peut aussi venir de la variable d'environnement `SAE_DB_PASSWORD
 ## 7. Lancer le centre sur la VM 2
 
 ```bash
-python centre.py
+python centre.py --bind 0.0.0.0
 ```
 
 Une fenetre s'ouvre. Elle montre deux secours inconnus lors de la toute premiere utilisation, ou les derniers etats connus si la base contient deja des informations. La liaison reste interrompue jusqu'a reception de messages.
 
-Le centre ecoute par defaut sur toutes les interfaces IPv4 (`0.0.0.0`), port 5000. Pour verifier depuis un autre terminal sur la VM 2 :
+Avec `--bind 0.0.0.0`, le centre ecoute sur toutes les interfaces IPv4 (`0.0.0.0`), port 5000. Pour verifier depuis un autre terminal sur la VM 2 :
 
 ```bash
 ss -ltn | grep ':5000'
@@ -162,7 +164,7 @@ sudo ufw allow from 192.168.56.10 to any port 5000 proto tcp
 
 Adapter les adresses. Ne pas ouvrir le port 3306 pour cette architecture.
 
-Pour un centre sans interface graphique : `python centre.py --headless`. Les donnees sont toujours stockees ; les consulter alors avec le client MariaDB. Ctrl+C arrete ce mode.
+Pour un centre sans interface graphique : `python centre.py --bind 0.0.0.0 --headless`. Les donnees sont toujours stockees ; les consulter alors avec le client MariaDB. Ctrl+C arrete ce mode.
 
 ## 8. Lancer la simulation sur la VM 1
 
@@ -180,7 +182,7 @@ Pour ne pas retaper l'adresse, renseigner `serveur` et `port` dans la section `[
 ## 9. Faire une demonstration complete
 
 1. Dans la simulation, cliquer sur **Demarrer** et observer l'arret aux feux.
-2. Cliquer sur **Envoyer le secours 01**. Le centre doit afficher `occupe` pour 01 uniquement.
+2. Choisir le secours 01 et une destination, puis cliquer sur **Envoyer en intervention**. Le centre doit afficher `occupe` pour 01 uniquement.
 3. Envoyer le secours 02. Verifier que les deux lignes restent independantes.
 4. Observer la priorite, les transitions et le retour des secours. Chaque secours redevient disponible a son retour a la caserne.
 5. Une fois les deux missions finies, observer la compensation si du vert supplementaire a ete memorise.
@@ -214,7 +216,7 @@ Les dates sont en UTC. `vehicules` contient le dernier etat par identifiant ; `h
 
 Ouvrir le dossier clone et choisir `.venv/bin/python` comme interpreteur du projet. PyCharm doit utiliser l'interpreteur de la VM sur laquelle vous lancez le programme, ou etre execute directement dans cette VM.
 
-Sur la VM 2, lancer une fois `init_db.py`, puis lancer `centre.py`. Sur la VM 1, lancer `main.py` avec l'adresse du centre dans `config.ini`. Les configurations par defaut n'ont alors besoin d'aucun argument PyCharm.
+Sur la VM 2, lancer une fois `init_db.py`, puis lancer `centre.py --bind 0.0.0.0`. Sur la VM 1, lancer `main.py` avec l'adresse du centre dans `config.ini`. Pour le centre sur deux VM, ajouter `--bind 0.0.0.0` dans les arguments PyCharm.
 
 Le repertoire de travail conseille est la racine du projet. Sans `--config`, le programme retrouve `config.ini` a cette racine meme si le repertoire courant differe.
 
@@ -227,7 +229,7 @@ Installer et configurer MariaDB sur cet ordinateur, puis ouvrir deux terminaux d
 ```bash
 # Terminal 1
 source .venv/bin/activate
-python centre.py
+python centre.py --bind 0.0.0.0
 ```
 
 ```bash

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.interface.map_view import MapView
-from src.models.layout import car_route
+from src.models.layout import DESTINATIONS, car_route, rescue_route
 from src.simulation.engine import Simulation
 
 
@@ -83,15 +83,22 @@ class MainWindow(QMainWindow):
         layout.addLayout(row)
 
         missions = QHBoxLayout()
-        self.mission_buttons = {}
-        button01 = QPushButton("Envoyer le secours 01")
-        button01.clicked.connect(self._send_01)
-        button02 = QPushButton("Envoyer le secours 02")
-        button02.clicked.connect(self._send_02)
-        self.mission_buttons["01"] = button01
-        self.mission_buttons["02"] = button02
-        missions.addWidget(button01)
-        missions.addWidget(button02)
+        missions.addWidget(QLabel("Vehicule"))
+        self.rescue_combo = QComboBox()
+        self.rescue_combo.addItem("01 - Pompiers", "01")
+        self.rescue_combo.addItem("02 - Ambulance", "02")
+        missions.addWidget(self.rescue_combo)
+        missions.addWidget(QLabel("Intervention"))
+        self.destination_combo = QComboBox()
+        for side, name in DESTINATIONS.items():
+            self.destination_combo.addItem(name, side)
+        self.destination_combo.setCurrentIndex(self.destination_combo.findData("S"))
+        missions.addWidget(self.destination_combo)
+        self.send_button = QPushButton("Envoyer en intervention")
+        self.send_button.clicked.connect(self._send_selected)
+        missions.addWidget(self.send_button)
+        self.rescue_combo.currentIndexChanged.connect(self._update_send_button)
+        missions.addStretch()
         layout.addLayout(missions)
 
     def _build_traffic_tab(self):
@@ -153,7 +160,9 @@ class MainWindow(QMainWindow):
         row.addWidget(self.route_checkbox)
         self.route_combo = QComboBox()
         for rescue in self.scenario.rescues:
-            self.route_combo.addItem(rescue.route.name, rescue.route)
+            for side in DESTINATIONS:
+                route, crossings, hospital = rescue_route(rescue.identifier, rescue.route.points[0][1], side)
+                self.route_combo.addItem(route.name, route)
         for origin in ("N", "S", "E", "W"):
             for turn in ("straight", "left", "right"):
                 route, stop = car_route(origin, turn)
@@ -166,11 +175,18 @@ class MainWindow(QMainWindow):
         row.addWidget(fit_button)
         layout.addLayout(row)
 
-    def _send_01(self):
-        self.start_mission("01")
+    def _send_selected(self):
+        self.start_mission(self.rescue_combo.currentData(), self.destination_combo.currentData())
 
-    def _send_02(self):
-        self.start_mission("02")
+    def _update_send_button(self):
+        rescue = self.scenario.get_rescue(self.rescue_combo.currentData())
+        self.send_button.setEnabled(not rescue.busy)
+        self.destination_combo.setEnabled(not rescue.busy)
+        if rescue.busy:
+            self.destination_combo.setCurrentIndex(self.destination_combo.findData(rescue.destination))
+            self.send_button.setText("Ce secours est deja en mission")
+        else:
+            self.send_button.setText("Envoyer en intervention")
 
     def _fit_map(self):
         self.view.fit_scene(reset_zoom=True)
@@ -209,8 +225,12 @@ class MainWindow(QMainWindow):
         self._publish_events()
         self.refresh()
 
-    def start_mission(self, identifier):
-        self.scenario.start_mission(identifier)
+    def start_mission(self, identifier, destination="S"):
+        started = self.scenario.start_mission(identifier, destination)
+        if started:
+            # Le trajet affiche correspond a la mission qui vient d'etre envoyee.
+            name = self.scenario.get_rescue(identifier).route.name
+            self.route_combo.setCurrentIndex(self.route_combo.findText(name))
         self._publish_events()
         self.refresh()
 
@@ -249,6 +269,7 @@ class MainWindow(QMainWindow):
         self.phase_label.setText(f"{frame.phase_name}\n{remaining}")
         debt = self.scenario.lights.debt
         self.debt_label.setText(f"Compensation en attente :\nNord-Sud : {debt['NS']:.1f} s\nEst-Ouest : {debt['EW']:.1f} s")
+        self._update_send_button()
         for rescue in frame.rescues:
             self._refresh_rescue(rescue)
         if self.playing:
@@ -274,7 +295,6 @@ class MainWindow(QMainWindow):
             status.setText("Disponible")
         stage.setText(rescue.stage)
         progress.setValue(round(rescue.progress * 100))
-        self.mission_buttons[rescue.identifier].setEnabled(not rescue.busy)
         model = self.scenario.get_rescue(rescue.identifier)
         if not model.busy:
             text = f"Duree prevue hors attentes : {model.total_estimate:.0f} s"

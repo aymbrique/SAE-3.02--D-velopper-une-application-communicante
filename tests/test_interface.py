@@ -59,8 +59,12 @@ class InterfaceTests(unittest.TestCase):
         self.addCleanup(center.close)
         self.addCleanup(window.close)
         for identifier in ("01", "02"):
-            window.mission_buttons[identifier].click()
-            self.assertFalse(window.mission_buttons[identifier].isEnabled())
+            window.rescue_combo.setCurrentIndex(window.rescue_combo.findData(identifier))
+            destination = "E" if identifier == "01" else "W"
+            window.destination_combo.setCurrentIndex(window.destination_combo.findData(destination))
+            window.send_button.click()
+            self.assertFalse(window.send_button.isEnabled())
+            self.assertEqual(window.scenario.get_rescue(identifier).destination, destination)
         wait_for(lambda: client.snapshot()[1] == 0)
         center.refresh()
         self.assertEqual(center.states.item(0, 1).text(), "occupe")
@@ -73,8 +77,10 @@ class InterfaceTests(unittest.TestCase):
         center.refresh()
         for index, identifier in enumerate(("01", "02")):
             self.assertEqual(center.states.item(index, 1).text(), "disponible")
-            self.assertTrue(window.mission_buttons[identifier].isEnabled())
-        window.mission_buttons["01"].click()
+            window.rescue_combo.setCurrentIndex(window.rescue_combo.findData(identifier))
+            self.assertTrue(window.send_button.isEnabled())
+        window.rescue_combo.setCurrentIndex(0)
+        window.send_button.click()
         window.reset_button.click()
         wait_for(lambda: client.snapshot()[1] == 0)
         center.refresh()

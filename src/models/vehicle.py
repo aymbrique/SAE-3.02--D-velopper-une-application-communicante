@@ -23,6 +23,9 @@ class Vehicle:
     dwell_remaining: float = 0.0
     visited: bool = False
     total_estimate: float = 0.0
+    origin: str = ""
+    turn: str = ""
+    destination: str = "S"
 
     @property
     def crossing(self):

@@ -1,4 +1,4 @@
-"""Centre TCP et MariaDB - VM 2. Lancer apres init_db.py."""
+"""Centre TCP et MariaDB - meme VM que la simulation. Lancer apres init_db.py."""
 
 import argparse
 import sys
@@ -13,7 +13,7 @@ from src.stockage.mariadb import MariaDBStore
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
-    parser.add_argument("--bind", default="0.0.0.0", help="Adresse locale d'ecoute TCP")
+    parser.add_argument("--bind", default="127.0.0.1", help="Adresse locale d'ecoute TCP")
     parser.add_argument("--port", type=int)
     parser.add_argument("--headless", action="store_true", help="Serveur sans fenetre")
     args = parser.parse_args()

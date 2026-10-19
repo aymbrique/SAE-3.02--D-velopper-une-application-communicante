@@ -44,12 +44,13 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 |---|---|
 | `test_demo.py` - 8 tests historiques | Geometrie et chronologie de l'ancienne demonstration. |
 | `test_simulation.py` - 11 tests | Feux, transitions, degagement, arbitrage, seuils, ETA, compensation, interruption/reprise, files, arret au rouge et passage au vert. |
-| Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, une seule traversee et progression du trafic. |
+| Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, deux traversees opposees compatibles au maximum et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
+| `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 80/10/10, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
 | `test_interface.py` - 2 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
-## Verification sur vos deux VM
+## Verification sur votre VM
 
 ### Resultats locaux du 6 octobre 2026
 
@@ -68,6 +69,16 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Les tests de dix minutes de trafic, priorite, compensation et espacement restent valides.
 - Les essais ont lieu localement ; le lancement sur les deux VM du binome reste a verifier en TP.
 
+### Version du 19 octobre 2026 : quatre destinations et une VM
+
+- 34 tests verifies sous Python 3.12 : suite de 33 tests passee avec MariaDB reelle, puis regression supplementaire de sortie bouchee passee. Les deux tests Qt ont ete rejoues apres le dernier ajustement des listes de choix.
+- Verification des 16 couples de destinations des secours avec 40 voitures/minute : retours a la caserne, absence de chevauchement et poursuite du trafic.
+- Verification du partage du carrefour Nord-Sud et Est-Ouest pour les voitures opposees allant tout droit ; maintien de l'exclusion pour les virages et du respect du rouge.
+- Verification des probabilites 80/10/10 et de la conservation de la destination d'une mission active.
+- Regression pour une sortie bouchee : la demande de priorite attend que la sortie puisse se degager ; un secours deja engage conserve sa priorite.
+- Essais des commandes Qt et du lien avec le centre ; lancement des programmes avec MariaDB locale.
+- Deploiement retenu : une seule VM, simulation et centre separes, connexion TCP sur 127.0.0.1:5000.
+
 ### Grille a realiser en TP
 
 | Essai | Action | Resultat attendu |
@@ -84,6 +95,6 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | Historique | Relancer le centre puis interroger MariaDB | Lignes historiques toujours presentes. |
 | Duree | Laisser tourner dix minutes | Au plus 25 voitures, aucune fermeture ni blocage durable. |
 
-Les tests automatises de demandes opposees utilisent des positions initiales controlees. En demonstration libre, les deux missions empruntent le meme trajet aller/retour, decale dans le temps ; le chevauchement entre un aller et un retour depend de l'instant de depart choisi.
+Les tests automatises de demandes opposees utilisent aussi des positions initiales controlees. En demonstration libre, les deux secours peuvent emprunter des destinations differentes ; les demandes et les attentes dependent du trafic et des instants de depart.
 
-Les essais locaux utilisent le reseau loopback : ils prouvent les echanges entre programmes mais ne valident pas le reseau virtuel, le pare-feu ou l'affichage graphique de vos propres VM.
+Les essais locaux utilisent le reseau loopback : ils prouvent les echanges entre programmes mais ne constituent pas une installation realisee sur votre VM ; verifier son service MariaDB, son environnement Python et son affichage graphique avec le [guide de deploiement](deploiement-une-vm.md).

@@ -1,9 +1,9 @@
-"""Simulation a pas fixe. Un seul passage est reserve dans le carrefour."""
+"""Simulation a pas fixe. Deux voitures opposees allant tout droit peuvent passer ensemble."""
 
 from math import hypot, inf, isfinite
 from random import Random
 
-from src.models.layout import METRES_PER_UNIT, car_exit, car_route, rescue_route
+from src.models.layout import DESTINATIONS, OPPOSITE, METRES_PER_UNIT, car_exit, car_route, rescue_route
 from src.models.vehicle import Frame, Vehicle, VehicleState
 from src.simulation.lights import Lights, Request
 
@@ -23,7 +23,7 @@ class Simulation:
         self.completed = 0
         self.next_id = 1
         self.lights = Lights()
-        self.crossing_owner = None
+        self.crossing_owners = set()
         self.cars = []
         self.rescues = []
         self.events = []
@@ -43,10 +43,18 @@ class Simulation:
                 return vehicle
         raise ValueError("Secours inconnu : " + identifier)
 
-    def start_mission(self, identifier):
+    def start_mission(self, identifier, destination="S"):
         vehicle = self.get_rescue(identifier)
         if vehicle.busy:
             return False
+        parking_y = vehicle.route.points[0][1]
+        route, crossings, hospital = rescue_route(identifier, parking_y, destination)
+        vehicle.route = route
+        vehicle.crossings = crossings
+        vehicle.hospital = hospital
+        vehicle.destination = destination
+        vehicle.total_estimate = route.length / vehicle.speed + DWELL
+        vehicle.waiting = False
         vehicle.busy = True
         vehicle.started_at = self.time
         vehicle.distance = 0.0
@@ -62,11 +70,20 @@ class Simulation:
         self.events = []
         return events
 
+    def choose_turn(self):
+        # 8 nombres sur 10 : tout droit ; 1 : gauche ; 1 : droite.
+        choice = self.random.randrange(10)
+        if choice < 8:
+            return "straight"
+        if choice == 8:
+            return "left"
+        return "right"
+
     def spawn(self, origin=None, turn=None):
         if len(self.cars) >= MAX_CARS:
             return None
         origin = origin or self.random.choice(("N", "S", "E", "W"))
-        turn = turn or self.random.choice(("straight", "left", "right"))
+        turn = turn or self.choose_turn()
         route, stop = car_route(origin, turn)
         x, y, _ = route.sample(0)
         for other in self.vehicles:
@@ -76,7 +93,7 @@ class Simulation:
         axis = "NS" if origin in ("N", "S") else "EW"
         color = self.random.choice(("#5eb9cc", "#e9bc65", "#9a8ed4", "#78b89c", "#e7967f"))
         vehicle = Vehicle(f"C{self.next_id:04}", "car", route,
-                          ((stop, car_exit(route), axis),), color, 28)
+                          ((stop, car_exit(route), axis),), color, 28, origin=origin, turn=turn)
         self.next_id += 1
         self.cars.append(vehicle)
         return vehicle
@@ -96,6 +113,10 @@ class Simulation:
         for vehicle in self.rescues:
             distance, eta = self.approach(vehicle)
             if distance is not None and (distance <= 150 or eta <= 10):
+                # Ne pas bloquer l'autre axe au vert si la sortie est bouchee.
+                # Un secours deja engage garde sa priorite jusqu'au degagement.
+                if vehicle.identifier not in self.crossing_owners and not self._exit_clear(vehicle):
+                    continue
                 if vehicle.requested_at is None:
                     vehicle.requested_at = self.time
                 result.append(Request(vehicle.identifier, vehicle.crossing[2],
@@ -117,7 +138,7 @@ class Simulation:
             if rescue.busy:
                 rescue_busy = True
         self.lights.advance(STEP, self.requests(), rescue_busy,
-                            self.crossing_owner is None)
+                            not self.crossing_owners)
         if self.rate > 0:
             self.spawn_clock += STEP
             if self.spawn_clock >= 60 / self.rate:
@@ -137,7 +158,7 @@ class Simulation:
 
     def _movement_order(self, vehicle):
         # Le vehicule engage passe d'abord, puis celui qui a le plus avance.
-        engaged = vehicle.identifier == self.crossing_owner
+        engaged = vehicle.identifier in self.crossing_owners
         return (not engaged, -vehicle.distance, vehicle.identifier)
 
     def _clear_path(self, vehicle, target):
@@ -150,10 +171,25 @@ class Simulation:
                 return False
         return True
 
+    def can_share_crossing(self, first, second):
+        """Seules deux voitures opposees allant tout droit partagent le carrefour."""
+        return (first.kind == "car" and second.kind == "car"
+                and first.turn == "straight" and second.turn == "straight"
+                and OPPOSITE.get(first.origin) == second.origin)
+
+    def _exit_clear(self, vehicle):
+        stop, end, axis = vehicle.crossing
+        for offset in range(0, 46, 6):
+            if not self._clear_path(vehicle, end + offset):
+                return False
+        return True
+
     def _can_enter(self, vehicle):
         stop, end, axis = vehicle.crossing
-        if self.crossing_owner not in (None, vehicle.identifier):
-            return False
+        for other in self.vehicles:
+            if other.identifier in self.crossing_owners and other is not vehicle:
+                if not self.can_share_crossing(vehicle, other):
+                    return False
         if self.lights.signal(axis) != "green":
             return False
         if vehicle.kind != "car" and self.lights.owner and self.lights.owner.identifier != vehicle.identifier:
@@ -167,13 +203,6 @@ class Simulation:
     def _move(self, vehicle):
         if vehicle.kind != "car" and not vehicle.busy:
             return
-        if vehicle.kind != "car" and vehicle.distance == 0:
-            for other in self.rescues:
-                if (other is not vehicle and other.busy
-                        and (other.started_at, other.identifier) < (vehicle.started_at, vehicle.identifier)
-                        and other.distance < other.crossings[0][0] + GAP):
-                    vehicle.waiting = True
-                    return
         if vehicle.dwell_remaining > 0:
             vehicle.dwell_remaining = max(0.0, vehicle.dwell_remaining - STEP)
             vehicle.waiting = True
@@ -190,11 +219,10 @@ class Simulation:
         if target > old and self._clear_path(vehicle, target):
             vehicle.distance = target
             if entering and target > crossing[0]:
-                self.crossing_owner = vehicle.identifier
+                self.crossing_owners.add(vehicle.identifier)
         vehicle.waiting = vehicle.distance <= old + 1e-9
         if crossing and vehicle.distance >= crossing[1]:
-            if self.crossing_owner == vehicle.identifier:
-                self.crossing_owner = None
+            self.crossing_owners.discard(vehicle.identifier)
             vehicle.crossing_index += 1
             vehicle.requested_at = None
         if vehicle.hospital is not None and not vehicle.visited and vehicle.distance >= vehicle.hospital:
@@ -207,44 +235,47 @@ class Simulation:
             self.completed += 1
             self.events.append((vehicle.identifier, "disponible"))
 
-    def _limit_at_side_access(self, vehicle, old, target):
-        """Laisser les secours traverser les acces de la caserne et de l'intervention."""
-        north_access = False
-        south_access = False
+    def _access_owner(self, side):
+        """Un seul secours manoeuvre a la fois dans un acces lateral."""
+        candidates = []
         for rescue in self.rescues:
             if not rescue.busy:
                 continue
-            if (rescue.distance < rescue.crossings[0][0] + GAP
-                    or rescue.distance > rescue.crossings[1][1] - 5):
-                north_access = True
-            if rescue.crossings[0][1] < rescue.distance < rescue.crossings[1][0] - 70:
-                south_access = True
+            for start, guard, end, access_side in rescue.route.accesses:
+                if access_side == side and start <= rescue.distance < end:
+                    # Un secours deja engage finit avant celui qui attend.
+                    engaged = rescue.distance > guard
+                    candidates.append((not engaged, rescue.started_at, rescue.identifier))
+        if candidates:
+            return min(candidates)[2]
+        return None
 
+    def _limit_at_side_access(self, vehicle, old, target):
         if vehicle.kind == "car":
-            start = vehicle.route.points[0]
-            gate = None
-            if start == (516, 25) and north_access:
-                gate = 115
-            elif start == (584, 835) and south_access:
-                gate = 25
-            if gate is not None and old <= gate:
-                target = min(target, gate)
+            # Retenir les nouvelles arrivees en amont de l'acces reserve.
+            if self._access_owner(vehicle.origin) is not None:
+                gate = 0 if vehicle.origin == "N" else 25
+                if old <= gate:
+                    target = min(target, gate)
         else:
-            parking_y = vehicle.route.points[0][1]
-            guards = [((457, parking_y), "N"), ((516, 650), "S"), ((584, 270), "N")]
-            for point, axis in guards:
-                index = vehicle.route.points.index(point)
-                guard = vehicle.route.distances[index]
-                if old <= guard < target and self._side_access_occupied(axis):
-                    target = guard
+            for start, guard, end, side in vehicle.route.accesses:
+                if old <= guard < target:
+                    owner = self._access_owner(side)
+                    if owner != vehicle.identifier or self._side_access_occupied(side):
+                        target = guard
         return target
 
-    def _side_access_occupied(self, axis):
+    def _side_access_occupied(self, side):
+        # Verifier seulement la voie entrante ; la voie sortante peut se degager.
         for car in self.cars:
             x, y, angle = car.position
-            if axis == "N" and 490 < x < 540 and 140.001 < y < 365:
+            if side == "N" and 490 < x < 540 and 25.001 < y < 365:
                 return True
-            if axis == "S" and 560 < x < 610 and 580 < y < 809.999:
+            if side == "S" and 560 < x < 610 and 495 < y < 809.999:
+                return True
+            if side == "E" and 580 < x < 1049.999 and 370 < y < 420:
+                return True
+            if side == "W" and 50.001 < x < 520 and 440 < y < 490:
                 return True
         return False
 
@@ -257,11 +288,11 @@ class Simulation:
                 if not vehicle.busy:
                     stage = "A la caserne"
                 elif vehicle.dwell_remaining > 0:
-                    stage = "Sur intervention"
+                    stage = "Intervention - " + DESTINATIONS[vehicle.destination]
                 elif vehicle.visited:
                     stage = "Retour a la caserne"
                 else:
-                    stage = "Vers l'intervention"
+                    stage = "Vers le point " + DESTINATIONS[vehicle.destination]
             states.append(VehicleState(vehicle.identifier, vehicle.kind, vehicle.color,
                                        vehicle.route, x, y, heading, vehicle.waiting,
                                        vehicle.busy, vehicle.distance / vehicle.route.length, stage))

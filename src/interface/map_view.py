@@ -4,7 +4,8 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QBrush, QColor, QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
-from src.models.layout import CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH
+from src.models.layout import (CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
+                               DESTINATIONS, INTERVENTION_POINTS)
 
 SIGNAL_COLORS = {"red": "red", "amber": "orange", "green": "green"}
 
@@ -41,7 +42,7 @@ class MapView(QGraphicsView):
         super().__init__(parent)
         self.setScene(QGraphicsScene(self))
         self.setSceneRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
-        self.setBackgroundBrush(QColor("white"))
+        self.setBackgroundBrush(QColor("#a8cf8a"))
         self.setMinimumSize(420, 340)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -65,9 +66,13 @@ class MapView(QGraphicsView):
         # Les deux routes principales et les acces des secours.
         self.rectangle(0, CY - ROAD_HALF, SCENE_WIDTH, 2 * ROAD_HALF, "gray")
         self.rectangle(CX - ROAD_HALF, 0, 2 * ROAD_HALF, SCENE_HEIGHT, "gray")
-        self.rectangle(245, 178, 250, 156, "lightgray")
+        self.rectangle(245, 150, 250, 184, "lightgray")
         self.rectangle(495, 192, 86, 46, "lightgray")
+        # Quatre aires simples, raccordees aux routes principales.
         self.rectangle(495, 680, 345, 96, "lightgray")
+        self.rectangle(800, 145, 96, 345, "lightgray")
+        self.rectangle(220, 370, 96, 345, "lightgray")
+        self.rectangle(495, 50, 300, 100, "lightgray")
 
         # Une ligne blanche separe les deux sens de circulation.
         pen = QPen(QColor("white"), 2, Qt.PenStyle.DashLine)
@@ -84,7 +89,9 @@ class MapView(QGraphicsView):
         self.text("CASERNE", 280, 140)
         self.text("Place 01", 280, 235)
         self.text("Place 02", 280, 295)
-        self.text("POINT D'INTERVENTION", 730, 640)
+        for side, (x, y) in INTERVENTION_POINTS.items():
+            self.rectangle(x - 22, y - 14, 44, 28, "#ffe091")
+            self.text("Intervention " + DESTINATIONS[side], x - 65, y - 43)
         self.text("NORD", 530, 5)
         self.text("SUD", 535, 837)
         self.text("OUEST", 15, 370)
