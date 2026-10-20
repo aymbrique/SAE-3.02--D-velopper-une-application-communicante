@@ -84,6 +84,10 @@ class MapView(QGraphicsView):
                     y -= SCENE_HEIGHT
                 points.append((x, y))
             (x1, y1), (x2, y2) = points
+            if (first, second) == ("R", "Q"):
+                # Une seule voie descendante : la moitie droite reste en herbe.
+                self.rectangle(x1 - ROAD_HALF, y1, ROAD_HALF, y2 - y1, "gray")
+                continue
             roads.append((x1, y1, x2, y2))
             self.scene().addLine(x1, y1, x2, y2, road_pen)
         for x1, y1, x2, y2 in roads:
