@@ -62,11 +62,10 @@ class Lights:
         # requests : demandes proches du carrefour ; busy : un secours est occupe.
         # clear : aucun vehicule n'est encore engage dans le carrefour.
         previous = self.owner
-        current = []
-        for request in requests:
-            current.append(request.identifier)
-        if self.owner and self.owner.identifier not in current:
-            self.owner = None
+        if self.owner:
+            # Garder le meme secours, mais actualiser son axe au prochain passage.
+            self.owner = next((request for request in requests
+                               if request.identifier == self.owner.identifier), None)
         if self.owner is None and requests:
             # Plus ancienne mission, puis plus ancienne demande, puis identifiant.
             self.owner = min(requests, key=self._priority_order)
@@ -92,7 +91,8 @@ class Lights:
             duration = self.GREEN + self.compensation_budget
             ended = self.elapsed >= duration - 1e-9
             interrupted = self.finish_green and (self.priority_green or self.elapsed >= self.GREEN - 1e-9)
-            if not holding and (ended or interrupted):
+            priority_other_axis = self.owner is not None and self.owner.axis != self.axis
+            if not holding and (ended or interrupted or priority_other_axis):
                 self.phase = "amber"
                 self.elapsed = 0.0
                 self.compensating = False

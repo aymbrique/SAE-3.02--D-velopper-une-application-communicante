@@ -3,7 +3,8 @@
 from math import hypot, inf, isfinite
 from random import Random
 
-from src.models.layout import DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y, car_exit, car_route, rescue_route
+from src.models.layout import (DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y,
+                               SCENE_WIDTH, SCENE_HEIGHT, car_exit, car_route, rescue_route)
 from src.models.vehicle import Frame, Vehicle, VehicleState
 from src.simulation.lights import Lights, Request
 
@@ -23,6 +24,7 @@ class Simulation:
         self.spawn_clock = 0.0
         self.completed = 0
         self.next_id = 1
+        self.traffic_bounds = (0, 0, SCENE_WIDTH, SCENE_HEIGHT)
         self.lights = Lights()
         self.crossing_owners = set()
         self.cars = []
@@ -83,9 +85,10 @@ class Simulation:
     def spawn(self, origin=None, turn=None):
         if len(self.cars) >= MAX_CARS:
             return None
-        origin = origin or self.random.choice(("N", "S", "E", "W"))
+        # Une arrivee sur deux vient du Nord ; les trois autres se partagent le reste.
+        origin = origin or self.random.choice(("N", "N", "N", "S", "E", "W"))
         turn = turn or self.choose_turn()
-        route, stop = car_route(origin, turn)
+        route, stop = car_route(origin, turn, self.traffic_bounds)
         x, y, _ = route.sample(0)
         for other in self.vehicles:
             other_x, other_y, angle = other.position
@@ -114,10 +117,8 @@ class Simulation:
         for vehicle in self.rescues:
             distance, eta = self.approach(vehicle)
             if distance is not None and (distance <= 150 or eta <= 10):
-                # Ne pas bloquer l'autre axe au vert si la sortie est bouchee.
-                # Un secours deja engage garde sa priorite jusqu'au degagement.
-                if vehicle.identifier not in self.crossing_owners and not self._exit_clear(vehicle):
-                    continue
+                # Demander le vert des l'approche, meme si la sortie est encore
+                # occupee. Le controle d'entree impose toujours sa liberation.
                 if vehicle.identifier not in self.crossing_owners:
                     # Deux secours peuvent rejoindre la meme file au retour.
                     # Le suiveur ne doit pas verrouiller le vert devant celui

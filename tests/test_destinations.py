@@ -74,7 +74,7 @@ class TrafficChangesTests(unittest.TestCase):
             sim.start_mission("02", "invalid")
         self.assertFalse(sim.rescues[1].busy)
 
-    def test_blocked_exit_does_not_hold_priority(self):
+    def test_blocked_exit_keeps_green_request_but_prevents_entry(self):
         sim = Simulation(rate=0)
         sim.start_mission("01", "W")
         rescue = sim.rescues[0]
@@ -84,14 +84,16 @@ class TrafficChangesTests(unittest.TestCase):
         car = sim.spawn("S", "straight")
         car.distance = car.crossing[1] + 20  # Voiture sur la sortie Nord commune.
         car.crossing_index = 1
+        car.speed = 0
         self.assertFalse(sim._exit_clear(rescue))
-        self.assertEqual(sim.requests(), [])
-        # Une priorite deja engagee reste maintenue jusqu'au degagement.
-        sim.crossing_owners.add(rescue.identifier)
         self.assertEqual(len(sim.requests()), 1)
-        sim.crossing_owners.clear()
+        sim.advance(2.1)
+        self.assertEqual(sim.lights.signal(rescue.crossing[2]), "green")
+        self.assertEqual(rescue.distance, rescue.crossing[0])
+        self.assertNotIn(rescue.identifier, sim.crossing_owners)
         sim.cars.clear()
-        self.assertEqual(len(sim.requests()), 1)
+        sim.advance(.5)
+        self.assertIn(rescue.identifier, sim.crossing_owners)
 
     def test_all_pairs_finish_without_overlaps_with_traffic(self):
         for first, second in product(DESTINATIONS, repeat=2):
@@ -110,6 +112,9 @@ class TrafficChangesTests(unittest.TestCase):
                     for vehicle in sim.vehicles:
                         if vehicle.identifier in sim.crossing_owners:
                             inside.append(vehicle)
+                            if vehicle.kind != "car":
+                                self.assertEqual(sim.lights.signal(vehicle.crossing[2]), "green",
+                                                 (sim.time, vehicle.identifier, vehicle.visited))
                     for a, b in combinations(inside, 2):
                         self.assertTrue(sim.can_share_crossing(a, b))
                     if all(not v.busy for v in sim.rescues):

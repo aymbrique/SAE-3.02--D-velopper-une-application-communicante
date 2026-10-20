@@ -10,6 +10,7 @@ METRES_PER_UNIT = 0.5
 STOP_DISTANCE = 96
 TURN_DISTANCE = 80
 CLEARANCE = 26
+CAR_EDGE_MARGIN = 30  # Faire apparaitre/disparaitre le rectangle hors de la vue.
 PARKING_X = 270
 PARKING_Y = {"01": 150, "02": 210}
 DESTINATIONS = {"W": "Ouest - point 1", "S": "Sud-Ouest - point 2",
@@ -53,10 +54,12 @@ def lane_point(center, heading, forward):
             center[1] + forward * dy + LANE * dx)
 
 
-def build_route(name, nodes, parking_y=None):
+def build_route(name, nodes, parking_y=None, traffic_bounds=None):
     """Relier les routes, arrondir les virages et noter les zones a reserver."""
     first = direction(NODES[nodes[0]], NODES[nodes[1]])
     points = [lane_point(NODES[nodes[0]], first, 0)]
+    if traffic_bounds is not None:
+        points.insert(0, outside_road(points[0], first, traffic_bounds, entering=True))
     if parking_y is not None:
         # Contourner les deux places pour ne pas passer sur le vehicule gare.
         points = [(PARKING_X, parking_y), (340, parking_y), (340, 234)]
@@ -106,6 +109,8 @@ def build_route(name, nodes, parking_y=None):
     last = direction(NODES[nodes[-2]], NODES[nodes[-1]])
     if parking_y is None:
         points.append(lane_point(NODES[nodes[-1]], last, 0))
+        if traffic_bounds is not None:
+            points.append(outside_road(points[-1], last, traffic_bounds))
     else:
         points.extend([(340, 166), (340, parking_y), (PARKING_X, parking_y)])
         junction_indexes.append((0, depot_exit_index, CLEARANCE, "parking"))
@@ -124,7 +129,25 @@ def build_route(name, nodes, parking_y=None):
     return route
 
 
-def car_route(origin, turn):
+def outside_road(point, heading, bounds, entering=False):
+    """Prolonger la voie jusqu'a l'exterieur du plan ET des marges visibles."""
+    left, top, right, bottom = bounds
+    x, y = point
+    dx, dy = heading
+    if entering:
+        dx, dy = -dx, -dy
+    if dx < 0:
+        x = min(0, left) - CAR_EDGE_MARGIN
+    elif dx > 0:
+        x = max(SCENE_WIDTH, right) + CAR_EDGE_MARGIN
+    elif dy < 0:
+        y = min(0, top) - CAR_EDGE_MARGIN
+    else:
+        y = max(SCENE_HEIGHT, bottom) + CAR_EDGE_MARGIN
+    return x, y
+
+
+def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT)):
     approaches = {
         "N": ["north", "F", "C"], "W": ["west", "W", "C"],
         "E": ["upper_east", "H", "U", "B", "C"],
@@ -144,7 +167,7 @@ def car_route(origin, turn):
     names = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
     movements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
     nodes = approaches[origin] + exits[destinations[origin][turn]][1:]
-    route = build_route(f"{names[origin]} - {movements[turn]}", nodes)
+    route = build_route(f"{names[origin]} - {movements[turn]}", nodes, traffic_bounds=traffic_bounds)
     return route, route.crossings[0][0]
 
 

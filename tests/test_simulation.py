@@ -43,14 +43,26 @@ class LightsTests(unittest.TestCase):
         tick(lights, .05, [Request("02", "NS", 0, 4), Request("01", "NS", 0, 4)], True)
         self.assertEqual(lights.owner.identifier, "01")
 
-    def test_opposite_priority_finishes_current_phase(self):
+    def test_opposite_priority_interrupts_green_and_waits_for_clearance(self):
         lights = Lights()
+        tick(lights, 1)
         request = [Request("01", "EW", 0, 0)]
-        tick(lights, 7.95, request, True)
-        self.assertEqual(lights.signal("NS"), "green")
         tick(lights, .05, request, True)
         self.assertEqual(lights.phase, "amber")
-        tick(lights, 2, request, True)
+        tick(lights, 1, request, True)
+        self.assertEqual(lights.phase, "all_red")
+        tick(lights, 2, request, True, clear=False)
+        self.assertEqual(lights.phase, "all_red")
+        tick(lights, .05, request, True)
+        self.assertEqual(lights.signal("EW"), "green")
+
+    def test_same_rescue_request_updates_axis_for_return(self):
+        lights = Lights()
+        tick(lights, 1, [Request("01", "NS", 0, 0)], True)
+        tick(lights, .05, [Request("01", "EW", 0, 1)], True)
+        self.assertEqual(lights.owner.axis, "EW")
+        self.assertEqual(lights.phase, "amber")
+        tick(lights, 2, [Request("01", "EW", 0, 1)], True)
         self.assertEqual(lights.signal("EW"), "green")
 
     def test_continuous_priority_debt_and_compensation_cap(self):

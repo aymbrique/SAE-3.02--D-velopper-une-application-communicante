@@ -22,13 +22,15 @@ L'onglet **Reseau** affiche l'adresse, la liaison et le nombre de mises a jour n
 
 La carte est volontairement simple : fond vert hors des routes, quatre points d'intervention, routes grises, feux ronds, voitures bleues, pompier 01 rouge et ambulance 02 blanche. Les vehicules sont des rectangles.
 
+Les voitures arrivent depuis l'exterieur des extremites visibles des routes, y compris les marges dues au format de la fenetre. Elles ne sont pas inserees au milieu d'une voie. La moitie des tirages d'arrivee vient du Nord ; les trois autres origines se partagent l'autre moitie. Une entree occupee peut retarder l'apparition.
+
 Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage initial. **Afficher un trajet** : choix parmi les huit parcours de secours (deux vehicules et quatre destinations) et les douze trajets de voiture. Survoler un vehicule affiche son identifiant et sa situation.
 
 Les voitures s'arretent au rouge et a l'orange avant d'entrer. Au vert, deux voitures opposees allant tout droit peuvent passer ensemble. Les autres mouvements attendent si le carrefour est occupe ; une sortie bouchee impose toujours l'attente. Une voiture deja engagee finit son passage. L'autre axe n'est ouvert qu'apres degagement et les transitions de securite.
 
 Le carrefour a feux se trouve a gauche du plan. Les raccordements des routes supplementaires, les acces a la caserne et aux interventions sont reserves un vehicule a la fois. Les voitures y laissent passer les secours en mission, meme au retour a la caserne et meme sans feu. Un vehicule deja engage termine son passage ; une voiture devant le secours avance pour liberer sa voie.
 
-Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Un secours attend que sa sortie soit libre avant de demander la priorite, afin de ne pas bloquer les autres axes.
+Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Des que le secours est a 150 m ou moins ou a 10 s d'arrivee ou moins, son feu est demande au vert, a l'aller comme au retour. Si l'autre axe est vert, il passe immediatement a l'orange, puis au tout rouge avant le vert du secours ; les vehicules deja engages finissent de degager. Une sortie occupee impose l'attente avant d'entrer, mais ne supprime plus la demande du vert.
 
 Les demandes de priorite admissibles sont departagees par mission la plus ancienne, puis demande la plus ancienne, puis identifiant. Une priorite attribuee n'est pas interrompue par l'autre secours. Le second ne passe pas avant le premier, meme si le meme axe est vert.
 

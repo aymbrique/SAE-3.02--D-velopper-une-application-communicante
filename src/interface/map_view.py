@@ -170,6 +170,11 @@ class MapView(QGraphicsView):
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.scale(self.zoom_factor, self.zoom_factor)
 
+    def traffic_bounds(self):
+        visible = self.mapToScene(self.viewport().rect()).boundingRect()
+        return (min(0, visible.left()), min(0, visible.top()),
+                max(SCENE_WIDTH, visible.right()), max(SCENE_HEIGHT, visible.bottom()))
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.fit_scene()

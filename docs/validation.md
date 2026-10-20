@@ -43,14 +43,15 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | Tests | Verification |
 |---|---|
 | `test_demo.py` - 8 tests historiques | Geometrie et chronologie de l'ancienne demonstration. |
-| `test_simulation.py` - 12 tests | Feux, transitions, degagement, arbitrage, seuils, ETA, accumulation sans perte et restitution sur plusieurs cycles, interruption/reprise, files, arret au rouge et passage au vert. |
+| `test_simulation.py` - 13 tests | Feux, interruption immediate du vert oppose, transitions, degagement, arbitrage, mise a jour de l'axe d'un meme secours, seuils, ETA, accumulation et restitution, files et arret au rouge. |
 | Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, plusieurs traversees tout droit compatibles sur le meme axe et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
 | `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 95/2,5/2,5, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
 | `test_traffic_flow.py` - 8 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, virages et secours exclusifs, sortie bouchee et attente devant un raccordement secondaire occupe. |
-| `test_interface.py` - 3 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP ; compteurs horizontal/vertical, pause et remise a zero. |
+| `test_interface.py` - 4 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP ; compteurs horizontal/vertical ; apparition hors de la vue apres redimensionnement et zoom. |
 | `test_map.py` - 2 tests | Pixels du dessin : gris clair hors de la chaussee, sept extremites ouvertes jusqu'aux bords et absence de nouvelle sortie Sud. |
-| `test_rescue_priority.py` - 8 tests | Priorite aller/retour aux raccordements sans feux, vert au retour, voiture deja engagee, degagement de la file devant un secours, deux secours sur la meme voie et missions apres accumulation du trafic a 60/min. |
+| `test_rescue_priority.py` - 9 tests | Priorite aller/retour aux raccordements sans feux, vert pret avant l'arrivee aux quatre destinations, voiture deja engagee, degagement de la file devant un secours, deux secours sur la meme voie et missions apres accumulation du trafic a 60/min. |
+| `test_spawn.py` - 3 tests | Debut et fin hors des bords visibles des douze trajets, espacement a l'apparition et environ 50 % de tirages venant du Nord. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
 ## Verification sur votre VM
@@ -114,6 +115,15 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Regression de deux secours rejoignant la meme file au retour : le suiveur suspend sa demande avant engagement pour laisser passer la tete de file, meme s'il avait demande le vert auparavant.
 - Accumulation verifiee sur les deux axes : 22 s de vert prioritaire donnent 14 s de reserve opposee. Une reserve de 12 s est restituee en deux bonus de 8 s puis 4 s, avec un vert normal de l'autre ligne entre les deux. Pause, remise a zero et suspension/reprise de compensation verifiees.
 - Controle graphique de 12 046 positions sur les 20 parcours : aucun centre dans l'herbe apres retrait du gris clair des routes. Les sept extremites ouvertes atteignent les bords ; aucune branche ajoutee. Affichage inspecte en 960 x 680 et 1280 x 820 ; capture actualisee dans `apercu_plan.png`.
+
+### Vert anticipe et arrivees aux bords du 20 octobre 2026
+
+- Base de travail : GitHub `b6035484bbab86fca752e5206f3e156a13f45198` ; 58 tests hors SQL passes sous Python 3.13. Les deux tests MariaDB n'ont pas ete rejoues, le stockage n'a pas change.
+- Le vert oppose est interrompu des la demande, avec 1 s d'orange, au moins 1 s de tout rouge et attente des vehicules engages. Pour les deux secours, les quatre destinations et les deux sens de mission, le vert est obtenu en 2,05 s lorsque l'arrivee est prevue dans 3 s et le carrefour libre.
+- Les 16 couples de destinations a 40 voitures/minute terminent leur mission sans chevauchement. Controle supplementaire : chaque secours engage au carrefour principal a toujours son feu vert, a l'aller comme au retour. L'essai a 60/min apres accumulation du trafic reste passant.
+- Une sortie bouchee conserve la demande du vert mais interdit l'engagement ; le secours entre apres liberation. L'axe d'une demande conservee est actualise, y compris pour le retour du meme vehicule.
+- Les douze parcours de voiture commencent et finissent hors du plan et hors des marges visibles, avec 30 unites de marge. Verifications Qt sur une fenetre 960 x 680, une fenetre large 1600 x 680 et un zoom x2 : aucune nouvelle voiture n'apparait au milieu de la vue.
+- Sur 12 000 creations independantes, les proportions restent proches de 50 % au Nord et de 1/6 pour chacune des autres origines. L'espacement a l'apparition et les probabilites 95/2,5/2,5 des virages restent verifies.
 
 ### Grille a realiser en TP
 

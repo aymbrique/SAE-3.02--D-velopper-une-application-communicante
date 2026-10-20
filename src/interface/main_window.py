@@ -227,6 +227,7 @@ class MainWindow(QMainWindow):
         # Temps reel depuis le dernier appel, limite en cas de fenetre bloquee.
         dt = min(self.clock.restart() / 1000, 0.1)
         if self.playing:
+            self.scenario.traffic_bounds = self.view.traffic_bounds()
             self.scenario.advance(dt * self.speed)
             self.elapsed = self.scenario.time
         self._publish_events()

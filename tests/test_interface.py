@@ -5,6 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import unittest
 from PyQt6.QtTest import QTest
+from PyQt6.QtCore import QPointF
 from PyQt6.QtWidgets import QApplication
 
 from src.interface.main_window import MainWindow
@@ -64,6 +65,25 @@ class InterfaceTests(unittest.TestCase):
         window.reset_button.click()
         self.assertEqual(window.accumulation_labels["EW"].text(), "0.0 s stockees")
         self.assertEqual(window.accumulation_labels["NS"].text(), "0.0 s stockees")
+
+    def test_new_cars_start_outside_view_after_resize_and_zoom(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.timer.stop()
+        window.show()
+        window.playing = True
+        for width, height, zoom in ((960, 680, 1), (1600, 680, 1), (1100, 720, 2)):
+            window.resize(width, height)
+            self.app.processEvents()
+            window.view.zoom_factor = zoom
+            window.view.fit_scene()
+            window._tick()
+            for origin in "NSEW":
+                with self.subTest(size=(width, height), zoom=zoom, origin=origin):
+                    window.scenario.cars.clear()
+                    car = window.scenario.spawn(origin, "straight")
+                    point = window.view.mapFromScene(QPointF(*car.position[:2]))
+                    self.assertFalse(window.view.viewport().rect().contains(point))
 
     def test_mission_buttons_return_and_reset_reach_the_center(self):
         store = MemoryStore()

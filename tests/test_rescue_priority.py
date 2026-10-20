@@ -65,6 +65,25 @@ class RescuePriorityTests(unittest.TestCase):
                 sim.advance(60)
                 self.assertFalse(rescue.busy)
 
+    def test_green_is_ready_before_rescue_arrives_outward_and_returning(self):
+        for identifier in ("01", "02"):
+            for destination in ("W", "S", "N", "E"):
+                for returning in (False, True):
+                    with self.subTest(rescue=identifier, destination=destination, returning=returning):
+                        sim = Simulation(rate=0)
+                        sim.start_mission(identifier, destination)
+                        rescue = sim.get_rescue(identifier)
+                        rescue.visited = returning
+                        rescue.crossing_index = int(returning)
+                        stop, end, axis = rescue.crossing
+                        rescue.distance = stop - 120  # Arrivee dans 3 s.
+                        sim.lights.axis = "EW" if axis == "NS" else "NS"
+                        sim.advance(2.05)
+                        self.assertEqual(sim.lights.signal(axis), "green")
+                        self.assertLess(rescue.distance, stop)
+                        sim.advance(1.5)
+                        self.assertIn(identifier, sim.crossing_owners)
+
     def test_car_already_inside_finishes_before_priority(self):
         sim = Simulation(rate=0)
         rescue, stop, end = self.at_junction(sim, "N", "B", True)
