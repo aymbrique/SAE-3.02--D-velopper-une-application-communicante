@@ -3,7 +3,7 @@
 from math import hypot, inf, isfinite
 from random import Random
 
-from src.models.layout import DESTINATIONS, OPPOSITE, METRES_PER_UNIT, car_exit, car_route, rescue_route
+from src.models.layout import DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y, car_exit, car_route, rescue_route
 from src.models.vehicle import Frame, Vehicle, VehicleState
 from src.simulation.lights import Lights, Request
 
@@ -27,8 +27,8 @@ class Simulation:
         self.cars = []
         self.rescues = []
         self.events = []
-        for identifier, kind, y, color in (("01", "fire", 245, "#db6758"),
-                                            ("02", "ambulance", 305, "#f8faf9")):
+        for identifier, kind, y, color in (("01", "fire", PARKING_Y["01"], "#db6758"),
+                                            ("02", "ambulance", PARKING_Y["02"], "#f8faf9")):
             route, crossings, hospital = rescue_route(identifier, y)
             self.rescues.append(Vehicle(identifier, kind, route, crossings, color, 40,
                                         hospital=hospital, total_estimate=route.length / 40 + DWELL))
@@ -181,12 +181,6 @@ class Simulation:
                 and second.origin in (first.origin, OPPOSITE[first.origin]))
 
     def _exit_clear(self, vehicle):
-        # Avant l'aller, degager aussi la voie que le secours croisera pres de
-        # son intervention. Sinon il pourrait attendre sur la sortie, retenir
-        # tout un convoi dans le carrefour et empecher cette voie de passer au vert.
-        if (vehicle.kind != "car" and vehicle.crossing_index == 0
-                and self._side_access_occupied(vehicle.destination)):
-            return False
         stop, end, axis = vehicle.crossing
         for offset in range(0, 46, 6):
             if not self._clear_path(vehicle, end + offset):
@@ -231,7 +225,7 @@ class Simulation:
             return
         old = vehicle.distance
         target = min(old + vehicle.speed * STEP, vehicle.route.length)
-        target = self._limit_at_side_access(vehicle, old, target)
+        target = self._limit_at_junctions(vehicle, old, target)
         crossing = vehicle.crossing
         entering = crossing is not None and old <= crossing[0] and target > crossing[0]
         if entering and not self._can_enter(vehicle):
@@ -257,51 +251,26 @@ class Simulation:
             self.completed += 1
             self.events.append((vehicle.identifier, "disponible"))
 
-    def _access_owner(self, side):
-        """Un seul secours manoeuvre a la fois dans un acces lateral."""
-        candidates = []
-        for rescue in self.rescues:
-            if not rescue.busy:
-                continue
-            for start, guard, end, access_side in rescue.route.accesses:
-                preparing = (side == rescue.destination and bool(rescue.crossings)
-                             and not rescue.visited and rescue.distance < start)
-                if access_side == side and (preparing or start <= rescue.distance < end):
-                    # Un secours deja engage finit avant celui qui attend.
-                    engaged = rescue.distance > guard
-                    candidates.append((not engaged, rescue.started_at, rescue.identifier))
-        if candidates:
-            return min(candidates)[2]
-        return None
-
-    def _limit_at_side_access(self, vehicle, old, target):
-        if vehicle.kind == "car":
-            # Retenir les nouvelles arrivees en amont de l'acces reserve.
-            if self._access_owner(vehicle.origin) is not None:
-                gate = 0 if vehicle.origin == "N" else 25
-                if old <= gate:
-                    target = min(target, gate)
-        else:
-            for start, guard, end, side in vehicle.route.accesses:
-                if old <= guard < target:
-                    owner = self._access_owner(side)
-                    if owner != vehicle.identifier or self._side_access_occupied(side):
-                        target = guard
+    def _limit_at_junctions(self, vehicle, old, target):
+        """Aux raccordements sans feux, reserver un passage puis le liberer."""
+        for stop, end, key in vehicle.route.junctions:
+            if old <= stop < target:
+                if not self._junction_clear(vehicle, stop, end, key):
+                    target = stop
         return target
 
-    def _side_access_occupied(self, side):
-        # Verifier seulement la voie entrante ; la voie sortante peut se degager.
-        for car in self.cars:
-            x, y, angle = car.position
-            if side == "N" and 490 < x < 540 and 25.001 < y < 365:
-                return True
-            if side == "S" and 560 < x < 610 and 495 < y < 809.999:
-                return True
-            if side == "E" and 580 < x < 1049.999 and 370 < y < 420:
-                return True
-            if side == "W" and 50.001 < x < 520 and 440 < y < 490:
-                return True
-        return False
+    def _junction_clear(self, vehicle, stop, end, key):
+        for other in self.vehicles:
+            if other is vehicle or (other.kind != "car" and not other.busy):
+                continue
+            for other_stop, other_end, other_key in other.route.junctions:
+                if key == other_key and other_stop < other.distance < other_end:
+                    return False
+        # Controler aussi la sortie avant d'engager le vehicule.
+        for offset in range(0, int(end - stop) + 46, 6):
+            if not self._clear_path(vehicle, stop + offset):
+                return False
+        return True
 
     def frame(self):
         states = []

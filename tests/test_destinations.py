@@ -5,7 +5,7 @@ from itertools import combinations, product
 from math import hypot
 import unittest
 
-from src.models.layout import DESTINATIONS, INTERVENTION_POINTS, rescue_route
+from src.models.layout import DESTINATIONS, INTERVENTION_POINTS, PARKING_X, PARKING_Y, rescue_route
 from src.simulation.engine import GAP, Simulation
 
 
@@ -56,13 +56,13 @@ class TrafficChangesTests(unittest.TestCase):
         self.assertGreater(counts["right"], 0, counts)
 
     def test_routes_reach_all_points_and_return_to_parking(self):
-        for identifier, y in (("01", 245), ("02", 305)):
+        for identifier, y in PARKING_Y.items():
             for side in DESTINATIONS:
                 route, crossings, stop = rescue_route(identifier, y, side)
-                self.assertEqual(route.points[0], (350, y))
-                self.assertEqual(route.points[-1], (350, y))
+                self.assertEqual(route.points[0], (PARKING_X, y))
+                self.assertEqual(route.points[-1], (PARKING_X, y))
                 self.assertEqual(route.sample(stop)[:2], INTERVENTION_POINTS[side])
-                self.assertEqual(len(crossings), 0 if side == "N" else 2)
+                self.assertEqual(len(crossings), 2)
 
     def test_destination_is_fixed_during_a_mission(self):
         sim = Simulation(rate=0)
@@ -82,7 +82,8 @@ class TrafficChangesTests(unittest.TestCase):
         rescue.crossing_index = 1
         rescue.distance = rescue.crossing[0]
         car = sim.spawn("S", "straight")
-        car.distance = 565  # Voiture sur la sortie Nord, a (584, 270).
+        car.distance = car.crossing[1] + 20  # Voiture sur la sortie Nord commune.
+        car.crossing_index = 1
         self.assertFalse(sim._exit_clear(rescue))
         self.assertEqual(sim.requests(), [])
         # Une priorite deja engagee reste maintenue jusqu'au degagement.

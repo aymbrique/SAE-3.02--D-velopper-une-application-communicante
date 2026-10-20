@@ -7,7 +7,7 @@
 3. **Mettre en pause** fige le temps simule, les vehicules et les feux. La connexion TCP reste active pendant la pause.
 4. **Reprendre** continue depuis le meme etat. La liste de vitesse (x0,5, x1, x2) change le rapport entre temps reel et temps simule.
 5. Le champ **Voitures / minute** accepte 0 a 60. A 0, les voitures deja presentes finissent leurs trajets, sans nouvelles arrivees.
-6. Choisir le **Vehicule** (01 pompiers ou 02 ambulance), puis **Intervention** (Nord, Sud, Est, Ouest). **Envoyer en intervention** demarre sa mission et envoie immediatement son etat occupe. Un secours deja occupe ne peut ni repartir ni changer de destination. Le second secours reste selectionnable et peut partir pendant la premiere mission.
+6. Choisir le **Vehicule** (01 pompiers ou 02 ambulance), puis **Intervention** (Ouest - point 1, Sud-Ouest - point 2, Nord-Est - point 3, Est - point 4). **Envoyer en intervention** demarre sa mission et envoie immediatement son etat occupe. Un secours deja occupe ne peut ni repartir ni changer de destination. Le second secours reste selectionnable et peut partir pendant la premiere mission.
 7. **Recommencer** remet le moteur et les compteurs a zero, annule les missions et envoie disponible pour les deux secours. Le debit choisi est conserve. L'historique MariaDB n'est pas efface.
 
 Une mission declenchee pendant la pause devient occupee mais n'avance qu'apres reprise. A l'arrivee au point d'intervention, le secours attend 8 secondes simulees puis revient a la caserne. Il repasse disponible a son retour.
@@ -26,9 +26,9 @@ Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage init
 
 Les voitures s'arretent au rouge et a l'orange avant d'entrer. Au vert, deux voitures opposees allant tout droit peuvent passer ensemble. Les autres mouvements attendent si le carrefour est occupe ; une sortie bouchee impose toujours l'attente. Une voiture deja engagee finit son passage. L'autre axe n'est ouvert qu'apres degagement et les transitions de securite.
 
-Les acces lateraux a la caserne et a l'aire d'intervention sont reserves temporairement aux secours. Les voitures peuvent donc attendre en amont de ces acces, meme loin du feu principal. C'est une regle simple de protection des croisements annexes, pas un second systeme de feux.
+Le carrefour a feux se trouve a gauche du plan. Les raccordements des routes supplementaires, les acces a la caserne et aux interventions sont reserves un vehicule a la fois. Les voitures peuvent donc attendre avant ces zones, meme loin du feu principal. Ces raccordements n'ont pas de feux.
 
-Le point Nord est du cote de la caserne : il ne demande pas de traverser le carrefour central. Les autres destinations possedent un passage aller et un passage retour. Un secours attend que sa sortie soit libre avant de demander la priorite, afin de ne pas bloquer les autres axes.
+Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Un secours attend que sa sortie soit libre avant de demander la priorite, afin de ne pas bloquer les autres axes.
 
 Les demandes de priorite admissibles sont departagees par mission la plus ancienne, puis demande la plus ancienne, puis identifiant. Une priorite attribuee n'est pas interrompue par l'autre secours. Le second ne passe pas avant le premier, meme si le meme axe est vert.
 
@@ -44,4 +44,4 @@ Une coupure change l'indication de liaison, pas l'etat disponible/occupe. Un mes
 
 Le centre ne commande pas les feux : ceux-ci appartiennent au moteur de la simulation. Il affiche et conserve les etats recus.
 
-Le choix aleatoire de direction des voitures utilise 80 % tout droit, 10 % gauche, 10 % droite. Il s'agit de probabilites, pas de quotas par groupe de dix voitures.
+Le choix aleatoire de direction des voitures utilise 95 % tout droit, 2,5 % gauche, 2,5 % droite. Il s'agit de probabilites, pas de quotas par groupe de dix voitures.

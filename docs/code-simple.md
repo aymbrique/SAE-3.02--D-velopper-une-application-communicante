@@ -34,7 +34,7 @@ Les missions proposent maintenant quatre destinations ; la circulation permet au
 | Condition | Si le feu est rouge, le vehicule attend. |
 | Boucle | Parcourir les voitures pour mettre leurs positions a jour. |
 | Liste | `cars` contient les voitures presentes. |
-| Dictionnaire | `mission_buttons["01"]` retrouve le bouton du secours 01. |
+| Dictionnaire | `NODES["C"]` retrouve les coordonnees du carrefour a feux. |
 | Fonction / methode | `start_mission("01")` declenche une mission. |
 | Classe | `Simulation` regroupe les donnees et les actions du moteur. |
 | `self` | Designe l'objet courant, par exemple la fenetre ouverte. |
@@ -71,3 +71,15 @@ Conserver toutes les fonctions demande quelques mecanismes a apprendre progressi
 - La formule de Bezier dessine les virages arrondis. Elle reste isolee dans `route.py` ; elle n'est pas necessaire pour comprendre les boutons ou les messages TCP.
 
 La simplification rend les etapes plus visibles ; elle ne transforme pas les sockets, les calculs de trajectoire et la gestion des priorites en notions deja acquises en premiere annee.
+
+## Modifier le plan de la simulation
+
+Il n'y a qu'une application de simulation : `main.py`. Le plan est dans `src/models/layout.py` et son dessin dans `src/interface/map_view.py`.
+
+- `NODES` associe un nom court a une position `(x, y)` ; `C` est le carrefour a feux, `F` l'acces de la caserne.
+- `ROAD_SEGMENTS` liste les paires de points relies par une route.
+- `car_route` et `rescue_route` donnent la liste des points a suivre.
+- `build_route` decale les vehicules sur la voie de droite, arrondit les virages et note les zones de passage.
+- `engine.py` fait avancer les vehicules sur ces parcours et les retient avant une zone occupee.
+
+Le dessin et les deplacements utilisent donc les memes coordonnees. Pour ajouter une route utilisee, il faut l'ajouter a `ROAD_SEGMENTS` puis l'inclure dans un parcours. Les lettres historiques `W`, `S`, `N`, `E` identifient les destinations ; leurs libelles sont maintenant Ouest, Sud-Ouest, Nord-Est et Est.

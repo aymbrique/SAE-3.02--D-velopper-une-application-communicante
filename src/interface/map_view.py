@@ -5,7 +5,9 @@ from PyQt6.QtGui import QBrush, QColor, QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
 from src.models.layout import (CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
-                               DESTINATIONS, INTERVENTION_POINTS)
+                               DESTINATIONS, INTERVENTION_POINTS, NODES,
+                               ROAD_SEGMENTS, SITE_ENTRANCES, PARKING_Y)
+
 
 SIGNAL_COLORS = {"red": "red", "amber": "orange", "green": "green"}
 
@@ -63,45 +65,55 @@ class MapView(QGraphicsView):
         return item
 
     def _draw_map(self):
-        # Les deux routes principales et les acces des secours.
-        self.rectangle(0, CY - ROAD_HALF, SCENE_WIDTH, 2 * ROAD_HALF, "gray")
-        self.rectangle(CX - ROAD_HALF, 0, 2 * ROAD_HALF, SCENE_HEIGHT, "gray")
-        self.rectangle(245, 150, 250, 184, "lightgray")
-        self.rectangle(495, 192, 86, 46, "lightgray")
-        # Quatre aires simples, raccordees aux routes principales.
-        self.rectangle(495, 680, 345, 96, "lightgray")
-        self.rectangle(800, 145, 96, 345, "lightgray")
-        self.rectangle(220, 370, 96, 345, "lightgray")
-        self.rectangle(495, 50, 300, 100, "lightgray")
+        # Dessiner le reseau du croquis avec le style de la simulation existante.
+        road_pen = QPen(QColor("gray"), 2 * ROAD_HALF)
+        road_pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        marking = QPen(QColor("white"), 2, Qt.PenStyle.DashLine)
+        for first, second in ROAD_SEGMENTS:
+            x1, y1 = NODES[first]
+            x2, y2 = NODES[second]
+            self.scene().addLine(x1, y1, x2, y2, road_pen)
+        for first, second in ROAD_SEGMENTS:
+            x1, y1 = NODES[first]
+            x2, y2 = NODES[second]
+            self.scene().addLine(x1, y1, x2, y2, marking)
+        # Enlever les pointilles au milieu des raccordements.
+        for key in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"):
+            x, y = NODES[key]
+            self.rectangle(x - ROAD_HALF, y - ROAD_HALF,
+                           2 * ROAD_HALF, 2 * ROAD_HALF, "gray")
 
-        # Une ligne blanche separe les deux sens de circulation.
-        pen = QPen(QColor("white"), 2, Qt.PenStyle.DashLine)
-        self.scene().addLine(0, CY, CX - ROAD_HALF, CY, pen)
-        self.scene().addLine(CX + ROAD_HALF, CY, SCENE_WIDTH, CY, pen)
-        self.scene().addLine(CX, 0, CX, CY - ROAD_HALF, pen)
-        self.scene().addLine(CX, CY + ROAD_HALF, CX, SCENE_HEIGHT, pen)
+        # Caserne et allee d'acces, a gauche de l'axe vertical principal.
+        self.rectangle(190, 80, 180, 190, "lightgray")
+        self.rectangle(340, 130, CX - 340, 140, "lightgray")
+        self.text("CASERNE", 225, 55)
+        for identifier, y in PARKING_Y.items():
+            self.text("Place " + identifier, 197, y - 9)
+
+        # Aires d'intervention : meme gris clair et meme rectangle jaune qu'avant.
+        # Les carres bleus du croquis indiquaient uniquement leurs emplacements.
+        for side, entrance in SITE_ENTRANCES.items():
+            x, y = NODES["site_" + side]
+            road_y = NODES[entrance][1]
+            self.rectangle(x - 70, y - 90, 140, road_y - y + 90, "lightgray")
+            px, py = INTERVENTION_POINTS[side]
+            self.rectangle(px - 22, py - 14, 44, 28, "#ffe091")
+            self.text("Intervention " + DESTINATIONS[side], x - 85, y - 115)
+
+        # Un seul carrefour a feux, a l'emplacement de la croix verte du croquis.
         stop = QPen(QColor("white"), 4)
         self.scene().addLine(CX - 82, CY + 8, CX - 82, CY + ROAD_HALF - 8, stop)
         self.scene().addLine(CX + 8, CY + 82, CX + ROAD_HALF - 8, CY + 82, stop)
         self.scene().addLine(CX + 82, CY - ROAD_HALF + 8, CX + 82, CY - 8, stop)
         self.scene().addLine(CX - ROAD_HALF + 8, CY - 82, CX - 8, CY - 82, stop)
-
-        self.text("CASERNE", 280, 140)
-        self.text("Place 01", 280, 235)
-        self.text("Place 02", 280, 295)
-        for side, (x, y) in INTERVENTION_POINTS.items():
-            self.rectangle(x - 22, y - 14, 44, 28, "#ffe091")
-            self.text("Intervention " + DESTINATIONS[side], x - 65, y - 43)
-        self.text("NORD", 530, 5)
-        self.text("SUD", 535, 837)
-        self.text("OUEST", 15, 370)
-        self.text("EST", 1045, 465)
-
-        positions = {"N": (450, 325), "S": (640, 520),
-                     "E": (640, 325), "W": (450, 520)}
+        positions = {"N": (CX - 100, CY - 105), "S": (CX + 90, CY + 90),
+                     "E": (CX + 90, CY - 105), "W": (CX - 100, CY + 90)}
         for origin, (x, y) in positions.items():
             self.lights[origin] = self.scene().addEllipse(
                 x, y, 20, 20, QPen(QColor("black")), QBrush(QColor("red")))
+        self.text("NORD", CX - 20, 5)
+        self.text("OUEST", 25, CY - 58)
+        self.text("EST", 1510, CY + 40)
 
     def sync(self, frame, elapsed):
         # Enlever les voitures qui ont fini leur trajet.

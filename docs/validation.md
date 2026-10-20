@@ -47,7 +47,7 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, plusieurs traversees tout droit compatibles sur le meme axe et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
 | `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 95/2,5/2,5, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
-| `test_traffic_flow.py` - 8 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, virages et secours exclusifs, sortie bouchee et reservation anticipee de l'acces secours. |
+| `test_traffic_flow.py` - 8 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, virages et secours exclusifs, sortie bouchee et attente devant un raccordement secondaire occupe. |
 | `test_interface.py` - 2 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
@@ -90,6 +90,18 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Les 16 couples de destinations des secours ont ete testes avec du trafic a 40/min. La reservation anticipee de l'acces destination evite de bloquer la sortie du carrefour en attendant une voie entrante.
 - Verification graphique locale hors ecran : affichage des convois sur les deux axes, lecture, pause et reinitialisation.
 - Les modules TCP/MariaDB n'ont pas ete modifies ; les essais d'integration SQL n'ont pas ete rejoues pour cette modification du moteur.
+
+### Plan integre du 20 octobre 2026
+
+- Lancement reel de `init_db.py`, `centre.py --headless` et `main.py` en processus distincts : etats initiaux recus et conserves en base.
+- 42 tests passes sous Python 3.12 avec MariaDB 10.11.14 reelle, sans test ignore.
+- Verification complementaire des deux fenetres Qt avec TCP/MariaDB : etats, remise a zero, minuteur, vitesse et pause/reprise.
+- Plan du croquis integre a la simulation lancee par `main.py` ; suppression de la fenetre et du lanceur de maquette separes.
+- Controle graphique de 11 890 positions reparties sur les 20 parcours (12 voitures et 8 secours) : les centres restent sur les routes ou les aires dessinees.
+- Controle des 16 couples de destinations a 40 voitures/minute : aucun chevauchement detecte, retour des deux secours et progression du trafic.
+- Conservation du tirage 95/2,5/2,5 et des files tout droit simultanees au carrefour principal. Les raccordements secondaires sont exclusifs et peuvent ralentir la sortie des files.
+- Regressions adaptees aux nouvelles coordonnees : quatre interventions et deux traversees par mission, sortie Nord bouchee, attente puis reprise devant un raccordement secondaire occupe.
+- Inspection graphique locale hors ecran en 1320 x 900 et en 960 x 680, avec et sans affichage du trajet. Capture dans `apercu_plan.png`.
 
 ### Grille a realiser en TP
 

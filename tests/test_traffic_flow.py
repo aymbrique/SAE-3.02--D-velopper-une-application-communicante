@@ -41,9 +41,13 @@ class TrafficFlowTests(unittest.TestCase):
                 self.assertGreater(maximum, 2)
                 # Les files avancent sans s'arreter derriere leurs leaders.
                 self.assertTrue(all(not car.waiting for car in cars))
-                for step in range(200):
+                # Les nouveaux raccordements en aval peuvent ralentir la sortie.
+                # Tous les vehicules doivent quand meme finir par degager.
+                for step in range(800):
                     sim.advance(STEP)
                     self.assert_gaps(sim)
+                    if not sim.crossing_owners:
+                        break
                 self.assertFalse(sim.crossing_owners)
 
     def test_follower_keeps_moving_when_leader_has_just_left_crossing(self):
@@ -143,25 +147,24 @@ class TrafficFlowTests(unittest.TestCase):
         self.assertFalse(sim.can_share_crossing(leader, rescue))
         self.assert_gaps(sim)
 
-    def test_rescue_waits_before_crossing_when_destination_access_is_occupied(self):
+    def test_rescue_waits_at_occupied_secondary_junction_then_continues(self):
         sim = Simulation(rate=0)
         sim.start_mission("01", "E")
         rescue = sim.get_rescue("01")
-        rescue.distance = rescue.crossing[0]
+        stop, end, key = next(zone for zone in rescue.route.junctions if zone[2] == "B")
+        rescue.distance = stop
+        rescue.crossing_index = 1  # Le carrefour principal est deja franchi.
         blocker = sim.spawn("E", "straight")
-        blocker.distance = blocker.crossing[0]
+        occupied = next(zone for zone in blocker.route.junctions if zone[2] == key)
+        blocker.distance = occupied[0] + 50
         blocker.speed = 0
-        arriving = sim.spawn("E", "straight")
-        self.assertEqual(sim._access_owner("E"), rescue.identifier)
-        self.assertFalse(sim._exit_clear(rescue))
-        self.assertEqual(sim.requests(), [])
         sim.advance(2)
-        self.assertEqual(rescue.distance, rescue.crossing[0])
-        self.assertLessEqual(arriving.distance, 25)
+        self.assertEqual(rescue.distance, stop)
+        self.assert_gaps(sim)
         sim.cars.remove(blocker)
-        self.assertTrue(sim._exit_clear(rescue))
-        self.assertEqual(len(sim.requests()), 1)
-        sim.advance(120)
+        sim.advance(1)
+        self.assertGreater(rescue.distance, stop)
+        sim.advance(180)
         self.assertFalse(rescue.busy)
         self.assert_gaps(sim)
 

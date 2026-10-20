@@ -1,125 +1,167 @@
-"""Trajets fixes de la carte. Une unite de scene represente 0,5 metre."""
+"""Plan commun au dessin et aux trajets : coordonnees du croquis utilisateur."""
 
+from math import hypot
 from src.models.route import Route, bezier
 
-CX, CY = 550, 430
+SCENE_WIDTH, SCENE_HEIGHT = 1600, 1100
+CX, CY = 450, 560
 LANE, ROAD_HALF = 34, 70
-SCENE_WIDTH, SCENE_HEIGHT = 1100, 860
 METRES_PER_UNIT = 0.5
-DESTINATIONS = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
-INTERVENTION_POINTS = {"N": (770, 130), "S": (770, 700),
-                       "E": (820, 210), "W": (280, 650)}
+STOP_DISTANCE = 96
+TURN_DISTANCE = 80
+CLEARANCE = 26
+PARKING_X = 270
+PARKING_Y = {"01": 150, "02": 210}
+DESTINATIONS = {"W": "Ouest - point 1", "S": "Sud-Ouest - point 2",
+                "N": "Nord-Est - point 3", "E": "Est - point 4"}
 OPPOSITE = {"N": "S", "S": "N", "E": "W", "W": "E"}
+
+# Les noeuds sont les raccordements des routes. C est le seul carrefour a feux.
+NODES = {
+    "C": (CX, CY), "F": (CX, 200), "north": (CX, 25), "depot": (PARKING_X, 200),
+    "W": (150, CY), "west": (25, CY), "B": (850, CY), "R": (1150, CY),
+    "E": (1400, CY), "east": (1575, CY),
+    "D": (CX, 950), "L": (150, 950), "Q": (1150, 950),
+    "low_west": (25, 950), "low_east": (1575, 950),
+    "U": (850, 240), "top": (850, 25), "H": (1400, 240), "upper_east": (1575, 240),
+    "site_W": (150, 420), "site_S": (150, 810),
+    "site_N": (1400, 110), "site_E": (1400, 420),
+}
+ROAD_SEGMENTS = [
+    ("north", "F"), ("F", "C"), ("C", "D"),
+    ("west", "W"), ("W", "C"), ("C", "B"), ("B", "R"), ("R", "E"), ("E", "east"),
+    ("top", "U"), ("U", "B"), ("U", "H"), ("H", "upper_east"),
+    ("R", "Q"), ("low_west", "L"), ("L", "D"), ("D", "Q"), ("Q", "low_east"),
+]
+SITE_ENTRANCES = {"W": "W", "S": "L", "N": "H", "E": "E"}
+INTERVENTION_POINTS = {}
+for side in DESTINATIONS:
+    x, y = NODES["site_" + side]
+    INTERVENTION_POINTS[side] = (x, y - 50)
+
+
+def direction(start, end):
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length = hypot(dx, dy)
+    return dx / length, dy / length
+
+
+def lane_point(center, heading, forward):
+    """Decaler un point sur la voie de droite et avancer de forward unites."""
+    dx, dy = heading
+    return (center[0] + forward * dx - LANE * dy,
+            center[1] + forward * dy + LANE * dx)
+
+
+def build_route(name, nodes, parking_y=None):
+    """Relier les routes, arrondir les virages et noter les zones a reserver."""
+    first = direction(NODES[nodes[0]], NODES[nodes[1]])
+    points = [lane_point(NODES[nodes[0]], first, 0)]
+    if parking_y is not None:
+        # Contourner les deux places pour ne pas passer sur le vehicule gare.
+        points = [(PARKING_X, parking_y), (340, parking_y), (340, 234)]
+    crossing_indexes = []
+    junction_indexes = []
+    hospital_index = None
+    depot_exit_index = None
+    depot_return_index = None
+
+    for index in range(1, len(nodes) - 1):
+        key = nodes[index]
+        center = NODES[key]
+        incoming = direction(NODES[nodes[index - 1]], center)
+        outgoing = direction(center, NODES[nodes[index + 1]])
+        if key.startswith("site_"):
+            # Demi-tour dans l'aire, avec arret sur le rectangle d'intervention.
+            x, y = center
+            start = len(points)
+            points.extend([(x + LANE, y), (x + LANE, y - 50), (x, y - 50),
+                           (x - LANE, y - 50), (x - LANE, y)])
+            hospital_index = start + 2
+            junction_indexes.append((start, len(points) - 1, 0, key))
+            continue
+
+        start = len(points)
+        points.append(lane_point(center, incoming, -STOP_DISTANCE))
+        points.append(lane_point(center, incoming, -TURN_DISTANCE))
+        end = lane_point(center, outgoing, TURN_DISTANCE)
+        if incoming == outgoing:
+            points.append(end)
+        else:
+            control1 = (points[-1][0] + incoming[0] * 64,
+                        points[-1][1] + incoming[1] * 64)
+            control2 = (end[0] - outgoing[0] * 64, end[1] - outgoing[1] * 64)
+            points.extend(bezier(points[-1], control1, control2, end))
+        if key == "C":
+            axis = "NS" if incoming[0] == 0 else "EW"
+            crossing_indexes.append((start, len(points) - 1, axis))
+        else:
+            junction_indexes.append((start, len(points) - 1, CLEARANCE, key))
+        if parking_y is not None and key == "F":
+            if depot_exit_index is None:
+                depot_exit_index = len(points) - 1
+            else:
+                depot_return_index = start
+
+    last = direction(NODES[nodes[-2]], NODES[nodes[-1]])
+    if parking_y is None:
+        points.append(lane_point(NODES[nodes[-1]], last, 0))
+    else:
+        points.extend([(340, 166), (340, parking_y), (PARKING_X, parking_y)])
+        junction_indexes.append((0, depot_exit_index, CLEARANCE, "parking"))
+        junction_indexes.append((depot_return_index, len(points) - 1, 0, "parking"))
+
+    route = Route(name, points)
+    route.crossings = []
+    for start, end, axis in crossing_indexes:
+        route.crossings.append((route.distances[start], route.distances[end] + CLEARANCE, axis))
+    route.junctions = []
+    for start, end, margin, key in junction_indexes:
+        route.junctions.append((route.distances[start], route.distances[end] + margin, key))
+    route.hospital = None
+    if hospital_index is not None:
+        route.hospital = route.distances[hospital_index]
+    return route
 
 
 def car_route(origin, turn):
-    rotations = {"W": 0, "N": 1, "E": 2, "S": 3}
-    points = [(-525, LANE), (-96, LANE), (-80, LANE)]
-    if turn == "straight":
-        points.extend([(80, LANE), (525, LANE)])
-    else:
-        end = (LANE, -80) if turn == "left" else (-LANE, 80)
-        corner = (LANE, LANE) if turn == "left" else (-LANE, LANE)
-        points.extend(bezier(points[-1], corner, corner, end))
-        points.append((LANE, -405) if turn == "left" else (-LANE, 405))
-    transformed = []
-    for x, y in points:
-        for _ in range(rotations[origin]):
-            x, y = -y, x
-        transformed.append((CX + x, CY + y))
-    transformed[0] = {"W": (25, CY + LANE), "N": (CX - LANE, 25),
-                      "E": (1075, CY - LANE), "S": (CX + LANE, 835)}[origin]
-    end_x, end_y = transformed[-1]
-    prev_x, prev_y = transformed[-2]
-    # Prolonger le dernier segment jusqu'au bord de la carte.
-    if abs(end_x - prev_x) > abs(end_y - prev_y):
-        if end_x > prev_x:
-            end_x = 1075
-        else:
-            end_x = 25
-    else:
-        if end_y > prev_y:
-            end_y = 835
-        else:
-            end_y = 25
-    transformed[-1] = (end_x, end_y)
+    approaches = {
+        "N": ["north", "F", "C"], "W": ["west", "W", "C"],
+        "E": ["upper_east", "H", "U", "B", "C"],
+        "S": ["low_east", "Q", "D", "C"],
+    }
+    exits = {
+        "N": ["C", "F", "north"], "W": ["C", "W", "west"],
+        "E": ["C", "B", "R", "E", "east"],
+        "S": ["C", "D", "Q", "R", "E", "east"],
+    }
+    destinations = {
+        "N": {"straight": "S", "left": "E", "right": "W"},
+        "S": {"straight": "N", "left": "W", "right": "E"},
+        "W": {"straight": "E", "left": "N", "right": "S"},
+        "E": {"straight": "W", "left": "S", "right": "N"},
+    }
     names = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
     movements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
-    route = Route(f"{names[origin]} - {movements[turn]}", tuple(transformed))
-    return route, route.distances[1]
+    nodes = approaches[origin] + exits[destinations[origin][turn]][1:]
+    route = build_route(f"{names[origin]} - {movements[turn]}", nodes)
+    return route, route.crossings[0][0]
 
 
 def rescue_route(identifier, parking_y, destination="S"):
-    """Aller au point choisi, attendre sur place, puis revenir a la caserne.
-
-    accesses contient (debut de reservation, ligne d'attente, fin, cote).
-    Les distances sont calculees apres avoir construit la liste des points.
-    """
     if destination not in DESTINATIONS:
         raise ValueError("Point d'intervention inconnu")
-    points = [(350, parking_y), (457, parking_y)]
-    access_indexes = []
-    crossing_indexes = []
-
-    if destination == "N":
-        # Le point Nord est du cote de la caserne : inutile de traverser le carrefour.
-        points.extend([(584, parking_y), (584, 130), (770, 130)])
-        hospital = len(points) - 1
-        points.extend([(770, 70), (516, 70), (516, 160), (457, 160)])
-        access_indexes.append((0, 1, len(points) - 1, "N"))
-        points.extend([(280, 160), (280, parking_y), (350, parking_y)])
-    else:
-        points.extend(bezier(points[-1], (516, parking_y), (516, 315), (516, 326)))
-        turn = {"S": "straight", "E": "left", "W": "right"}[destination]
-        outward, stop = car_route("N", turn)
-        outward_index = len(points)
-        points.extend(outward.points[1:-1])
-        crossing_indexes.append((outward_index, len(points) - 1, "NS"))
-        access_indexes.append((0, 1, outward_index, "N"))
-
-        # Meme aire d'intervention, tournee vers le Sud, l'Est ou l'Ouest.
-        loop = [(516, 650)]
-        loop.extend(bezier(loop[-1], (516, 700), (550, 700), (610, 700)))
-        loop.append((770, 700))
-        hospital = len(points) + len(loop) - 1
-        loop.extend(bezier(loop[-1], (835, 700), (835, 760), (770, 760)))
-        loop.append((620, 760))
-        loop.extend(bezier(loop[-1], (584, 760), (584, 720), (584, 680)))
-        loop_start = len(points)
-        rotations = {"S": 0, "E": 3, "W": 1}
-        for x, y in loop:
-            x, y = x - CX, y - CY
-            for rotation in range(rotations[destination]):
-                x, y = -y, x
-            points.append((CX + x, CY + y))
-        access_indexes.append((loop_start, loop_start, len(points) - 1, destination))
-
-        turn = {"S": "straight", "E": "right", "W": "left"}[destination]
-        inward, stop = car_route(destination, turn)
-        inward_index = len(points)
-        points.extend(inward.points[1:-1])
-        axis = "NS" if destination == "S" else "EW"
-        crossing_indexes.append((inward_index, len(points) - 1, axis))
-        return_guard = len(points)
-        points.append((584, 270))
-        points.extend(bezier(points[-1], (584, 190), (530, 190), (457, 190)))
-        access_indexes.append((return_guard, return_guard, len(points) - 1, "N"))
-        points.append((280, 190))
-        points.extend(bezier(points[-1], (250, 190), (250, parking_y), (280, parking_y)))
-        points.append((350, parking_y))
-
-    route = Route(f"Secours {identifier} - {DESTINATIONS[destination]} - aller/retour", points)
-    crossings = []
-    for start, end, axis in crossing_indexes:
-        crossings.append((route.distances[start], route.distances[end] + 26, axis))
-    route.accesses = []
-    for start, guard, end, side in access_indexes:
-        # Reserver un peu avant d'arriver afin de laisser sortir les voitures presentes.
-        reserve = max(0, route.distances[start] - 100)
-        route.accesses.append((reserve, route.distances[guard], route.distances[end], side))
-    return route, tuple(crossings), route.distances[hospital]
+    paths = {
+        "W": ["depot", "F", "C", "W", "site_W"],
+        "S": ["depot", "F", "C", "D", "L", "site_S"],
+        "N": ["depot", "F", "C", "B", "U", "H", "site_N"],
+        "E": ["depot", "F", "C", "B", "R", "E", "site_E"],
+    }
+    outward = paths[destination]
+    nodes = outward + list(reversed(outward[:-1]))
+    route = build_route(f"Secours {identifier} - {DESTINATIONS[destination]} - aller/retour", nodes, parking_y)
+    return route, tuple(route.crossings), route.hospital
 
 
 def car_exit(route):
-    # Dernier point de la courbe centrale, puis marge de degagement de 26 unites.
-    return route.distances[-2] + 26
+    return route.crossings[0][1]

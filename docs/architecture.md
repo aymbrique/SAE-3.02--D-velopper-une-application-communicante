@@ -39,17 +39,19 @@ Le debit indique un intervalle de generation de `60 / debit` secondes. L'origine
 
 La distance minimale entre centres est de **44 unites**, superieure aux dimensions des formes dessinees. Le moteur conserve l'ensemble `crossing_owners` des vehicules engages. Les voitures allant tout droit depuis la meme origine ou depuis des origines opposees peuvent partager le carrefour. Plusieurs voitures de chaque file peuvent etre engagees : un suivant avance au vert avec son leader sans attendre sa sortie complete, en conservant GAP = 44 unites entre centres. Les virages et les secours restent exclusifs. Le changement d'axe attend le degagement de tous les vehicules engages. Les voitures tout droit deja engagees ou sur la sortie, encore en mouvement, ne bloquent plus le controle de tout le corridor. Chaque deplacement continue de verifier la distance avec tous les vehicules. Une voiture arretee sur la sortie bloque toujours une nouvelle entree. Les leaders deja sortis sont deplaces avant les voitures qui les suivent encore dans le carrefour, pour eviter un micro-arret a la sortie.
 
-Les acces a la caserne et au point d'intervention croisent des voies hors du carrefour principal. Une reservation temporaire retient les nouvelles arrivees en amont, laisse sortir les voitures deja dans la zone et autorise ensuite le secours. L'acces au point d'intervention est reserve en amont de la premiere traversee. Si sa voie entrante est encore occupee, la demande de priorite attend avant le carrefour pour laisser cette voie se degager. Le secours ne reste donc pas bloque sur la sortie avec un convoi derriere lui. Les vehicules deja engages continuent de se degager avant le changement d'axe.
+Le plan est defini dans `layout.py` : `NODES` contient les coordonnees des raccordements et `ROAD_SEGMENTS` relie ces points. Le dessin et les trajets partagent ces donnees. Les parcours sont des listes de noms de points, avec un decalage sur la voie de droite et des virages arrondis. Les origines Nord/Sud/Est/Ouest des voitures designent leur branche d'arrivee au carrefour principal ; une voiture venant de l'Est peut apparaitre sur la route superieure avant de rejoindre cette branche.
+
+Seul le point `C` possede des feux. Aux autres raccordements, une reservation simple autorise un vehicule a la fois : le suivant attend avant la zone tant qu'elle est occupee ou que sa sortie est bouchee. `route.junctions` contient les distances d'entree et de sortie de ces zones sur chaque parcours. La sortie de la caserne et les aires d'intervention sont egalement protegees. Les routes supplementaires peuvent donc provoquer une file en aval du carrefour principal.
 
 Ce choix conservateur limite le debit maximal. Une voiture peut attendre au vert pour respecter une reservation ou un espacement.
 
 ## Missions et feux
 
-Chaque secours a sa propre heure de depart, sa distance sur le parcours, sa destination et son etat. `rescue_route` construit un trajet vers Nord, Sud, Est ou Ouest. Nord reste du cote de la caserne sans passage central ; les autres trajets ont deux passages, dont le retour peut demander l'axe Est-Ouest. Les deux peuvent etre occupes en meme temps. Le trajet passe par l'intervention, attend 8 secondes puis retourne a la caserne. Le compteur des trajets termines comprend les sorties des voitures et les missions achevees.
+Chaque secours a sa propre heure de depart, sa distance sur le parcours, sa destination et son etat. `rescue_route` construit un trajet vers Ouest (point 1), Sud-Ouest (point 2), Nord-Est (point 3) ou Est (point 4). Tous ont deux passages au carrefour principal, dont le retour peut demander l'axe Est-Ouest. Les deux peuvent etre occupes en meme temps. Le trajet passe par l'intervention, attend 8 secondes puis retourne a la caserne. Le compteur des trajets termines comprend les sorties des voitures et les missions achevees.
 
 L'ETA est la distance restante sur le trajet jusqu'a la prochaine ligne d'arret, divisee par la vitesse nominale. Il n'inclut pas la prediction des files. A vitesse nulle, l'ETA est infini ; le critere de distance reste applicable.
 
-Seuls les secours ayant atteint 150 m ou moins, ou 10 s ou moins, deposent une demande. Sur cette petite carte, le depart de la caserne se trouve deja dans ce seuil. Le code et les tests couvrent aussi un secours hors seuil.
+Seuls les secours ayant atteint 150 m ou moins, ou 10 s ou moins, deposent une demande. Sur le nouveau plan, le secours approche du seuil apres avoir quitte sa place de stationnement. Le code et les tests couvrent aussi un secours hors seuil.
 
 L'ordre des demandes est : depart de mission le plus ancien, demande la plus ancienne, identifiant le plus petit. Le choix reste verrouille jusqu'a la sortie pendant la traversee. Avant l'engagement, une sortie bouchee suspend la demande afin que l'autre axe puisse se degager. Une demande plus ancienne ne remplace pas une priorite admissible en cours. Un second secours en sens oppose attend meme si l'axe est vert.
 
@@ -94,7 +96,7 @@ La liaison n'est pas un etat metier stocke dans ces tables : elle est calculee p
 
 ## Ajouts hors du PDF initial
 
-Le PDF initial ne precisait pas la base de donnees. MariaDB et son historique ont ete ajoutes sur demande du binome. Le centre est maintenant executable separement pour l'utilisation sur une VM Linux. Le systeme reste limite a un carrefour, deux secours et un centre.
+Le PDF initial ne precisait pas la base de donnees. MariaDB et son historique ont ete ajoutes sur demande du binome. Le centre est maintenant executable separement pour l'utilisation sur une VM Linux. Le systeme reste limite a un carrefour a feux, des raccordements secondaires sans feux, deux secours et un centre.
 
 L'installation de votre VM, la validation sur son environnement reel et la demonstration au professeur restent a effectuer avec le [guide](deploiement-une-vm.md) et la [grille de validation](validation.md).
 

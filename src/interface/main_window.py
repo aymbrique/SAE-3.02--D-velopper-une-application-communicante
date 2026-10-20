@@ -8,7 +8,6 @@ from PyQt6.QtWidgets import (
 )
 
 from src.interface.map_view import MapView
-from src.interface.maquette_window import MaquetteWindow
 from src.models.layout import DESTINATIONS, car_route, rescue_route
 from src.simulation.engine import Simulation
 
@@ -23,7 +22,6 @@ class MainWindow(QMainWindow):
         self.elapsed = 0.0
         self.playing = False
         self.speed = 1.0
-        self.maquette_window = None
         self._build_ui()
 
         # Qt appelle _tick regulierement. Le moteur calcule les deplacements.
@@ -175,9 +173,6 @@ class MainWindow(QMainWindow):
         fit_button = QPushButton("Vue complete")
         fit_button.clicked.connect(self._fit_map)
         row.addWidget(fit_button)
-        self.maquette_button = QPushButton("Nouvelle maquette")
-        self.maquette_button.clicked.connect(self._show_maquette)
-        row.addWidget(self.maquette_button)
         layout.addLayout(row)
 
     def _send_selected(self):
@@ -192,12 +187,6 @@ class MainWindow(QMainWindow):
             self.send_button.setText("Ce secours est deja en mission")
         else:
             self.send_button.setText("Envoyer en intervention")
-
-    def _show_maquette(self):
-        if self.maquette_window is None:
-            self.maquette_window = MaquetteWindow(self)
-        self.maquette_window.show()
-        self.maquette_window.raise_()
 
     def _fit_map(self):
         self.view.fit_scene(reset_zoom=True)
@@ -325,8 +314,6 @@ class MainWindow(QMainWindow):
         self.estimate_labels[rescue.identifier].setText(text)
 
     def closeEvent(self, event):
-        if self.maquette_window is not None:
-            self.maquette_window.close()
         self.timer.stop()
         if self.client:
             self.client.close()

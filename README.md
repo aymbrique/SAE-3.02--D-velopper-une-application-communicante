@@ -4,13 +4,9 @@ Projet de **Aymeri et Selim**, BUT Reseaux & Telecommunications : une simulation
 
 L'interface utilise des formes simples et les boutons standards de Qt. Pour comprendre le code progressivement : [guide de la version simplifiee](docs/code-simple.md).
 
-## Nouvelle maquette visuelle
+Le plan du croquis est integre directement dans `main.py` : routes grises, terrain vert, carrefour a feux a gauche, caserne au nord-ouest et quatre aires d'intervention. Les vehicules empruntent les routes de ce plan.
 
-La vue issue du croquis est disponible avec `python maquette.py`, ou le bouton **Nouvelle maquette** dans la simulation. Elle presente la croix verte a feux, les routes noires, la caserne en haut a gauche et les quatre points bleus.
-
-Cette etape porte uniquement sur le dessin. Les trajets de la simulation actuelle ne suivent pas encore ce nouveau plan ; ils seront adaptes ensuite. La maquette fonctionne sans centre et sans MariaDB.
-
-![Nouvelle maquette](docs/apercu_maquette.png)
+![Plan de la simulation principale](docs/apercu_plan.png)
 
 ## Commencer
 
@@ -32,7 +28,7 @@ Les programmes restent separes : le client joint le centre sur **127.0.0.1:5000*
 - Generation de voitures : 12/min par defaut, reglage de 0 a 60/min, 25 voitures au maximum, 95 % de chances d'aller tout droit, 2,5 % a gauche et 2,5 % a droite.
 - Deplacement calcule a chaque pas de simulation, arret aux feux, files et espacement minimal. Une voiture engagee finit sa traversee.
 - Cycle normal 8 s de vert, 1 s d'orange, au moins 1 s de rouge simultane. Les voitures allant tout droit sur le meme axe peuvent traverser ensemble, en sens opposes et en file avec un ecart minimal de 44 unites. Les virages et les secours restent exclusifs.
-- Choix du secours 01 ou 02 et du point Nord, Sud, Est ou Ouest ; trajet aller/intervention/retour, etats disponibles/occupes et estimations de duree. Le point Nord ne demande pas de traverser le carrefour.
+- Choix du secours 01 ou 02 et du point Ouest (1), Sud-Ouest (2), Nord-Est (3) ou Est (4) ; trajet aller/intervention/retour, etats disponibles/occupes et estimations de duree. Chaque trajet franchit le carrefour principal a l'aller et au retour.
 - Demande de priorite a 150 m ou moins **ou** 10 s d'arrivee ou moins. Arbitrage par anciennete de mission, puis de demande, puis identifiant ; maintien jusqu'a la sortie.
 - Memorisation du vert supplementaire, compensation uniquement quand tous les secours sont disponibles, vert compensatoire de 16 s maximum et suspension/reprise lors d'une nouvelle mission.
 - TCP en threads, JSON delimite par lignes, numeros de mise a jour, accuses de reception, reconnexion et suivi des coupures sans changement automatique de l'etat metier.
@@ -84,7 +80,7 @@ python -m unittest discover -s tests -v
 
 Les tests MariaDB sont actives uniquement avec une base de test dediee : voir [validation](docs/validation.md). Les essais automatises ne remplacent pas la verification du reseau, de l'affichage et du pare-feu sur votre VM.
 
-Le modele reste volontairement simple : partage du carrefour limite aux files de voitures allant tout droit sur le meme axe, acces lateraux reserves temporairement pour les secours, vitesses constantes et durees estimees hors attente. Le protocole est destine au reseau de TP, sans authentification ni chiffrement. Les messages non confirmes restent en memoire du client jusqu'a la reconnexion ; fermer ce client avant leur envoi perd cette file.
+Le modele reste volontairement simple : partage du carrefour limite aux files de voitures allant tout droit sur le meme axe, raccordements sans feux traverses un vehicule a la fois, vitesses constantes et durees estimees hors attente. Le protocole est destine au reseau de TP, sans authentification ni chiffrement. Les messages non confirmes restent en memoire du client jusqu'a la reconnexion ; fermer ce client avant leur envoi perd cette file.
 
 Le [cahier des charges](docs/Cahier_des_charges_SAE302.pdf) reste la reference. Le stockage MariaDB et le lancement sur une VM completent ce document a la demande du binome.
 
