@@ -47,7 +47,9 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, plusieurs traversees tout droit compatibles sur le meme axe et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
 | `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 95/2,5/2,5, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
-| `test_traffic_flow.py` - 8 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, virages et secours exclusifs, sortie bouchee et attente devant un raccordement secondaire occupe. |
+| `test_traffic_flow.py` - 10 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, mouvements en conflit exclusifs, sortie bouchee et secours suivant une voiture deja sortie. |
+| `test_secondary_flow.py` - 10 tests | File Nord jusqu'au vrai rouge, voies opposees devant la caserne, convois aux virages secondaires, reprise apres secours, retour derriere des voitures au-dela du conflit et maintien de GAP/obstacles reels. |
+| `test_route_rules.py` - 6 tests | Douze trajets voiture et huit missions secours, rejet de Q-R et E-R-Q, maintien des branches autorisees et coherence des mouvements locaux. |
 | `test_interface.py` - 4 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP ; compteurs horizontal/vertical ; apparition hors de la vue apres redimensionnement et zoom. |
 | `test_map.py` - 2 tests | Pixels du dessin : gris clair hors de la chaussee, sept extremites ouvertes jusqu'aux bords et absence de nouvelle sortie Sud. |
 | `test_rescue_priority.py` - 9 tests | Priorite aller/retour aux raccordements sans feux, vert pret avant l'arrivee aux quatre destinations, voiture deja engagee, degagement de la file devant un secours, deux secours sur la meme voie et missions apres accumulation du trafic a 60/min. |
@@ -124,6 +126,28 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Une sortie bouchee conserve la demande du vert mais interdit l'engagement ; le secours entre apres liberation. L'axe d'une demande conservee est actualise, y compris pour le retour du meme vehicule.
 - Les douze parcours de voiture commencent et finissent hors du plan et hors des marges visibles, avec 30 unites de marge. Verifications Qt sur une fenetre 960 x 680, une fenetre large 1600 x 680 et un zoom x2 : aucune nouvelle voiture n'apparait au milieu de la vue.
 - Sur 12 000 creations independantes, les proportions restent proches de 50 % au Nord et de 1/6 pour chacune des autres origines. L'espacement a l'apparition et les probabilites 95/2,5/2,5 des virages restent verifies.
+
+### Files devant la caserne et sens du raccordement Est du 20 octobre 2026
+
+- Base de travail : GitHub `4b0682ed7596702d6aeb79186867c132a353fcde` ; 76 tests hors SQL passes sous Python 3.13. Les deux tests MariaDB n'ont pas ete rejoues ; les modules de stockage et de compensation n'ont pas change.
+- Six voitures du Nord rejoignent leur vraie file au rouge, avec GAP, sans verrou artificiel devant la caserne. Les voies opposees et les convois suivant un meme virage secondaire avancent ensemble.
+- Apres le degagement d'un secours, la voiture devant F repart au pas suivant ; un secours peut suivre une voiture deja sortie de C dans la meme voie. Un obstacle immobile bloque toujours le passage.
+- Au retour F, les voitures du Nord arretees a y240/y285 ont deja depasse le conflit et ne bloquent plus le virage du secours ; celle a y195, encore dans son passage, reste un obstacle. Les mouvements opposes tout droit/droite sont verifies sur les deux axes ; les mouvements en conflit restent exclusifs.
+- Les 16 couples de destinations a 40/min finissent sans chevauchement, avec vert pendant chaque passage de secours et reprise du trafic. Les essais de dix minutes et le depart de missions apres une minute de trafic a 60/min restent passants.
+- Les douze trajets de voiture et les huit missions respectent le sens descendant du raccordement R-Q. Le constructeur rejette Q-R et E-R-Q, et accepte B-R-Q et B-R-E. Les sorties Sud restent sur la route inferieure jusqu'au bord droit. Fleche descendante et capture actualisees.
+- Controle graphique de 11 782 positions sur les 20 parcours, dans les limites du plan : aucun centre dans l'herbe.
+
+Comparatif d'un scenario determine : 180 secondes simulees, debit 60/min, graine 302, missions 01 vers Nord-Est et 02 vers Est des t0. Le calcul avance par pas de 0,05 s et GAP est controle toutes les 0,5 s. Ces resultats concernent ce scenario, pas tous les debits ou horaires de depart.
+
+| Mesure | Version 4b0682e | Version corrigee |
+|---|---:|---:|
+| Voitures sorties | 19 | 36 |
+| Dernier retour de secours | 134,65 s | 114,00 s |
+| Attente cumulee des secours pendant un axe vert | 36,65 s | 7,60 s |
+| Solde horizontal + vertical a t180 | 30,10 s | 9,05 s |
+| Plus petit ecart controle | 44,28 unites | 44,09 unites |
+
+L'attente au vert est mesuree apres chaque pas : secours occupe et immobile, sans temps d'intervention restant, avec un prochain passage C dont l'axe est vert. Elle peut donc concerner un raccordement avant C ; le dernier pas d'intervention de 0,05 s peut aussi etre inclus lorsque le compte a rebours atteint zero. Les secondes de compensation sont conservees integralement ; le gain provient de la circulation et du parcours corrige.
 
 ### Grille a realiser en TP
 

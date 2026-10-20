@@ -4,7 +4,7 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QBrush, QColor, QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
-from src.models.layout import (CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
+from src.models.layout import (CX, CY, LANE, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
                                DESTINATIONS, INTERVENTION_POINTS, NODES,
                                ROAD_SEGMENTS, SITE_ENTRANCES, PARKING_Y)
 
@@ -93,6 +93,15 @@ class MapView(QGraphicsView):
             x, y = NODES[key]
             self.rectangle(x - ROAD_HALF, y - ROAD_HALF,
                            2 * ROAD_HALF, 2 * ROAD_HALF, "gray")
+
+        # Ce raccordement ne se prend que vers le bas, depuis la gauche de R.
+        x = NODES["R"][0] - LANE
+        y = (NODES["R"][1] + NODES["Q"][1]) / 2
+        arrow = QPen(QColor("white"), 3)
+        for x1, y1, x2, y2 in ((x, y - 24, x, y + 24),
+                               (x - 9, y + 12, x, y + 24),
+                               (x + 9, y + 12, x, y + 24)):
+            self.scene().addLine(x1, y1, x2, y2, arrow)
 
         # Caserne et allee d'acces, a gauche de l'axe vertical principal.
         self.rectangle(190, 80, 180, 190, "lightgray")

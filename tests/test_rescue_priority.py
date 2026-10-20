@@ -22,7 +22,7 @@ class RescuePriorityTests(unittest.TestCase):
         for destination, key, origin, directions in (
                 ("N", "B", "E", (False,)), ("N", "B", "W", (True,)),
                 ("N", "U", "E", (False,)), ("N", "H", "E", (False, True)),
-                ("E", "R", "N", (False,)), ("E", "R", "W", (True,)),
+                ("E", "R", "W", (True,)),
                 ("E", "E", "W", (True,))):
             for returning in directions:
                 with self.subTest(destination=destination, junction=key, returning=returning):
@@ -87,9 +87,9 @@ class RescuePriorityTests(unittest.TestCase):
     def test_car_already_inside_finishes_before_priority(self):
         sim = Simulation(rate=0)
         rescue, stop, end = self.at_junction(sim, "N", "B", True)
-        car = sim.spawn("W", "straight")
+        car = sim.spawn("E", "straight")
         car_stop, car_end, key = next(zone for zone in car.route.junctions if zone[2] == "B")
-        car.distance = car_stop + 1
+        car.distance = car_stop + GAP + 6
         self.assertFalse(sim._junction_clear(rescue, stop, end, key))
         sim.advance(12)
         self.assertGreater(rescue.distance, end)

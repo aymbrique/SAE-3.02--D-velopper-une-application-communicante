@@ -56,6 +56,13 @@ def lane_point(center, heading, forward):
 
 def build_route(name, nodes, parking_y=None, traffic_bounds=None):
     """Relier les routes, arrondir les virages et noter les zones a reserver."""
+    nodes = tuple(nodes)
+    for first, second in zip(nodes, nodes[1:]):
+        if (first, second) == ("Q", "R"):
+            raise ValueError("Sens interdit : le raccordement R-Q se parcourt uniquement de R vers Q.")
+    for movement in zip(nodes, nodes[1:], nodes[2:]):
+        if movement == ("E", "R", "Q"):
+            raise ValueError("Virage interdit : un vehicule venant de E ne peut pas tourner de R vers Q.")
     first = direction(NODES[nodes[0]], NODES[nodes[1]])
     points = [lane_point(NODES[nodes[0]], first, 0)]
     if traffic_bounds is not None:
@@ -65,6 +72,7 @@ def build_route(name, nodes, parking_y=None, traffic_bounds=None):
         points = [(PARKING_X, parking_y), (340, parking_y), (340, 234)]
     crossing_indexes = []
     junction_indexes = []
+    junction_directions = []
     hospital_index = None
     depot_exit_index = None
     depot_return_index = None
@@ -100,6 +108,7 @@ def build_route(name, nodes, parking_y=None, traffic_bounds=None):
             crossing_indexes.append((start, len(points) - 1, axis))
         else:
             junction_indexes.append((start, len(points) - 1, CLEARANCE, key))
+            junction_directions.append((start, key, incoming, outgoing))
         if parking_y is not None and key == "F":
             if depot_exit_index is None:
                 depot_exit_index = len(points) - 1
@@ -117,12 +126,16 @@ def build_route(name, nodes, parking_y=None, traffic_bounds=None):
         junction_indexes.append((depot_return_index, len(points) - 1, 0, "parking"))
 
     route = Route(name, points)
+    route.nodes = tuple(nodes)
     route.crossings = []
     for start, end, axis in crossing_indexes:
         route.crossings.append((route.distances[start], route.distances[end] + CLEARANCE, axis))
     route.junctions = []
     for start, end, margin, key in junction_indexes:
         route.junctions.append((route.distances[start], route.distances[end] + margin, key))
+    route.junction_movements = {}
+    for start, key, incoming, outgoing in junction_directions:
+        route.junction_movements[(route.distances[start], key)] = (incoming, outgoing)
     route.hospital = None
     if hospital_index is not None:
         route.hospital = route.distances[hospital_index]
@@ -156,7 +169,7 @@ def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT)):
     exits = {
         "N": ["C", "F", "north"], "W": ["C", "W", "west"],
         "E": ["C", "B", "R", "E", "east"],
-        "S": ["C", "D", "Q", "R", "E", "east"],
+        "S": ["C", "D", "Q", "low_east"],
     }
     destinations = {
         "N": {"straight": "S", "left": "E", "right": "W"},

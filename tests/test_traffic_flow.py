@@ -75,6 +75,35 @@ class TrafficFlowTests(unittest.TestCase):
         self.assertNotIn(follower.identifier, sim.crossing_owners)
         self.assert_gaps(sim)
 
+    def test_rescue_follows_moving_car_that_has_already_left_crossing(self):
+        sim = Simulation(rate=0)
+        leader = sim.spawn("N", "straight")
+        leader.distance = leader.crossing[1] + .5
+        leader.crossing_index = 1
+        sim.start_mission("01", "S")
+        rescue = sim.get_rescue("01")
+        stop = rescue.crossing[0]
+        rescue.distance = stop
+        sim.advance(STEP)
+        self.assertGreater(rescue.distance, stop)
+        self.assertIn(rescue.identifier, sim.crossing_owners)
+        self.assert_gaps(sim)
+
+    def test_rescue_still_waits_for_stationary_car_on_exit(self):
+        sim = Simulation(rate=0)
+        leader = sim.spawn("N", "straight")
+        leader.distance = leader.crossing[1] + .5
+        leader.crossing_index = 1
+        leader.speed = 0
+        sim.start_mission("01", "S")
+        rescue = sim.get_rescue("01")
+        stop = rescue.crossing[0]
+        rescue.distance = stop
+        sim.advance(1)
+        self.assertEqual(rescue.distance, stop)
+        self.assertNotIn(rescue.identifier, sim.crossing_owners)
+        self.assert_gaps(sim)
+
     def test_close_follower_does_not_pause_when_leader_clears_crossing(self):
         sim = Simulation(rate=0)
         leader, follower = self.queue(sim, "N", 2)
@@ -154,7 +183,7 @@ class TrafficFlowTests(unittest.TestCase):
         stop, end, key = next(zone for zone in rescue.route.junctions if zone[2] == "B")
         rescue.distance = stop
         rescue.crossing_index = 1  # Le carrefour principal est deja franchi.
-        blocker = sim.spawn("E", "straight")
+        blocker = sim.spawn("W", "straight")
         occupied = next(zone for zone in blocker.route.junctions if zone[2] == key)
         blocker.distance = occupied[0] + 50
         blocker.speed = 0

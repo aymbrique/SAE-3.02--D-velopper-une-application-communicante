@@ -1,6 +1,6 @@
 """Simulation a pas fixe. Les files tout droit compatibles peuvent passer ensemble."""
 
-from math import hypot, inf, isfinite
+from math import cos, hypot, inf, isfinite, radians, sin
 from random import Random
 
 from src.models.layout import (DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y,
@@ -27,6 +27,7 @@ class Simulation:
         self.traffic_bounds = (0, 0, SCENE_WIDTH, SCENE_HEIGHT)
         self.lights = Lights()
         self.crossing_owners = set()
+        self.junction_conflicts = {}
         self.cars = []
         self.rescues = []
         self.events = []
@@ -185,18 +186,45 @@ class Simulation:
         return True
 
     def can_share_crossing(self, first, second):
-        """Les files tout droit du meme axe peuvent avancer en parallele."""
-        return (first.kind == "car" and second.kind == "car"
-                and first.turn == "straight" and second.turn == "straight"
-                and first.origin in OPPOSITE
-                and second.origin in (first.origin, OPPOSITE[first.origin]))
+        """Suivi tout droit et mouvements opposes sans croisement de trajectoire."""
+        if first.kind != "car" or second.kind != "car" or first.origin not in OPPOSITE:
+            return False
+        if second.origin == first.origin:
+            return first.turn == second.turn == "straight"
+        return (second.origin == OPPOSITE[first.origin]
+                and first.turn in ("straight", "right")
+                and second.turn in ("straight", "right"))
 
     def _exit_clear(self, vehicle):
         stop, end, axis = vehicle.crossing
+        departed = self._departed_crossing(vehicle, end)
         for offset in range(0, 46, 6):
-            if not self._clear_path(vehicle, end + offset):
+            if not self._clear_path(vehicle, end + offset, departed):
                 return False
         return True
+
+    def _following_exit(self, vehicle, end, other, other_end):
+        """Un leader deja sorti peut etre suivi dans la meme voie, a distance."""
+        if other.distance < other_end or other.speed <= 0 or other.waiting:
+            return False
+        x, y, heading = vehicle.route.sample(end)
+        ox, oy, other_heading = other.position
+        dx, dy = cos(radians(heading)), sin(radians(heading))
+        same_heading = cos(radians(other_heading - heading)) > 0.999
+        ahead = (ox - x) * dx + (oy - y) * dy
+        lateral = abs((ox - x) * dy - (oy - y) * dx)
+        return same_heading and ahead >= 0 and lateral < 1e-6
+
+    def _departed_crossing(self, vehicle, end):
+        departed = set()
+        for other in self.vehicles:
+            if other is vehicle or other.identifier in self.crossing_owners:
+                continue
+            for _, other_end, _ in other.crossings:
+                if self._following_exit(vehicle, end, other, other_end):
+                    departed.add(other.identifier)
+                    break
+        return departed
 
     def _can_enter(self, vehicle):
         stop, end, axis = vehicle.crossing
@@ -217,7 +245,7 @@ class Simulation:
         # Une voiture deja engagee et en mouvement ne bouche pas tout le trajet
         # des suivantes tout droit. Cela vaut aussi lorsqu'elle vient de sortir.
         # Les vehicules arretes, les virages et les secours restent des obstacles.
-        following = set()
+        following = self._departed_crossing(vehicle, end)
         for other in self.vehicles:
             if (other is not vehicle and self.can_share_crossing(vehicle, other)
                     and other.speed > 0 and not other.waiting
@@ -282,17 +310,68 @@ class Simulation:
             # sinon le secours resterait bloque derriere sa propre priorite.
             if not self._blocks_approach(vehicle, rescue, rescue_stop):
                 return False
+        following = set()
         for other in self.vehicles:
             if other is vehicle or (other.kind != "car" and not other.busy):
                 continue
             for other_stop, other_end, other_key in other.route.junctions:
-                if key == other_key and other_stop < other.distance < other_end:
-                    return False
+                if key != other_key:
+                    continue
+                if self.can_share_junction(vehicle, stop, key, other, other_stop):
+                    # La file peut avancer dans la zone jusqu'au vrai feu,
+                    # meme si son leader y attend. GAP reste controle a chaque pas.
+                    if other.distance >= other_stop:
+                        following.add(other.identifier)
+                elif self._following_exit(vehicle, end, other, other_end):
+                    following.add(other.identifier)
+                elif other_stop < other.distance < other_end:
+                    if self._junction_still_conflicts(
+                            vehicle, stop, end, key, other, other_stop, other_end):
+                        return False
         # Controler aussi la sortie avant d'engager le vehicule.
         for offset in range(0, int(end - stop) + 46, 6):
-            if not self._clear_path(vehicle, stop + offset):
+            if not self._clear_path(vehicle, stop + offset, following):
                 return False
         return True
+
+    def _junction_still_conflicts(self, vehicle, stop, end, key, other, other_stop, other_end):
+        """Liberer un passage des que l'autre a depasse le dernier point de conflit."""
+        first_move = vehicle.route.junction_movements.get((stop, key))
+        other_move = other.route.junction_movements.get((other_stop, key))
+        if first_move is None or other_move is None:
+            return True  # Les aires et le stationnement restent exclusifs.
+        # Inclure la fin du balayage : au retour F, les deux places divergent
+        # juste apres le raccordement, meme si leur mouvement est identique.
+        cache_key = (key, first_move, other_move, vehicle.route.sample(end + 46)[:2])
+        if cache_key not in self.junction_conflicts:
+            # Les memes mouvements au meme raccordement ont la meme geometrie.
+            # Calculer une seule fois ou l'autre vehicule finit de nous couper
+            # la route ; ajouter une marge pour l'echantillonnage de 3 unites.
+            path = [vehicle.route.sample(stop + offset)[:2]
+                    for offset in range(0, int(end - stop) + 47, 3)]
+            last_conflict = -inf
+            offsets = list(range(0, int(other_end - other_stop) + 1, 3))
+            offsets.append(other_end - other_stop)
+            for offset in offsets:
+                x, y, _ = other.route.sample(other_stop + offset)
+                if any(hypot(x - px, y - py) < GAP + 3 for px, py in path):
+                    last_conflict = offset + 3
+            self.junction_conflicts[cache_key] = last_conflict
+        return other.distance - other_stop <= self.junction_conflicts[cache_key]
+
+    def can_share_junction(self, first, stop, key, second, other_stop):
+        """Partager une meme voie locale ou deux voies tout droit opposees."""
+        if first.kind != "car" or second.kind != "car":
+            return False
+        first_move = first.route.junction_movements.get((stop, key))
+        second_move = second.route.junction_movements.get((other_stop, key))
+        if first_move is None or second_move is None:
+            return False
+        incoming, outgoing = first_move
+        other_incoming, other_outgoing = second_move
+        return (first_move == second_move
+                or (incoming == outgoing and other_incoming == other_outgoing
+                    and incoming == (-other_incoming[0], -other_incoming[1])))
 
     def _junction_priority(self, key):
         """Priorite tant que le secours est occupe, aller ET retour compris."""
