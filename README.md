@@ -4,6 +4,14 @@ Projet de **Aymeri et Selim**, BUT Reseaux & Telecommunications : une simulation
 
 L'interface utilise des formes simples et les boutons standards de Qt. Pour comprendre le code progressivement : [guide de la version simplifiee](docs/code-simple.md).
 
+## Nouvelle maquette visuelle
+
+La vue issue du croquis est disponible avec `python maquette.py`, ou le bouton **Nouvelle maquette** dans la simulation. Elle presente la croix verte a feux, les routes noires, la caserne en haut a gauche et les quatre points bleus.
+
+Cette etape porte uniquement sur le dessin. Les trajets de la simulation actuelle ne suivent pas encore ce nouveau plan ; ils seront adaptes ensuite. La maquette fonctionne sans centre et sans MariaDB.
+
+![Nouvelle maquette](docs/apercu_maquette.png)
+
 ## Commencer
 
 **Suivre le [guide de deploiement sur une VM Linux](docs/deploiement-une-vm.md).** Il explique le fonctionnement, les sockets locales, MariaDB, l'installation, PyCharm et les verifications.
