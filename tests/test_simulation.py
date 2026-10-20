@@ -57,7 +57,7 @@ class LightsTests(unittest.TestCase):
         lights = Lights()
         tick(lights, 10, [Request("01", "NS", 0, 0)], True)
         tick(lights, 10, [Request("02", "NS", 1, 1)], True)
-        self.assertAlmostEqual(lights.debt["EW"], 8)
+        self.assertAlmostEqual(lights.debt["EW"], 12)
         tick(lights, 2.05, busy=True)
         self.assertEqual(lights.signal("EW"), "green")
         self.assertFalse(lights.compensating)
@@ -66,8 +66,33 @@ class LightsTests(unittest.TestCase):
         self.assertEqual(lights.axis, "EW")
         self.assertAlmostEqual(lights.compensation_budget, 8)
         tick(lights, 16)
+        self.assertAlmostEqual(lights.debt["EW"], 4)
+        self.assertEqual(lights.phase, "amber")
+        tick(lights, 2)
+        self.assertEqual(lights.axis, "NS")
+        self.assertFalse(lights.compensating)
+        tick(lights, 10)
+        self.assertEqual(lights.axis, "EW")
+        self.assertAlmostEqual(lights.compensation_budget, 4)
+        tick(lights, 12)
         self.assertAlmostEqual(lights.debt["EW"], 0)
         self.assertEqual(lights.phase, "amber")
+
+    def test_accumulation_on_either_axis_and_no_double_counting(self):
+        for axis, opposite in (("NS", "EW"), ("EW", "NS")):
+            with self.subTest(axis=axis):
+                lights = Lights()
+                lights.axis = axis
+                request = [Request("02", axis, 0, 0)]
+                tick(lights, 8, request, True)
+                self.assertAlmostEqual(lights.debt[opposite], 0)
+                tick(lights, 14, request, True)
+                self.assertAlmostEqual(lights.debt[opposite], 14)
+                self.assertEqual(lights.debt[axis], 0)
+                tick(lights, 2.05, busy=True)
+                balance = dict(lights.debt)
+                tick(lights, 40, busy=True)
+                self.assertEqual(lights.debt, balance)
 
     def test_compensation_only_when_all_available_and_suspend_resume(self):
         lights = Lights()

@@ -46,6 +46,25 @@ class InterfaceTests(unittest.TestCase):
         self.assertFalse(window.playing)
         self.assertEqual(window.scenario.rate, 30)
 
+    def test_horizontal_and_vertical_accumulation_counters(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        lights = window.scenario.lights
+        from src.simulation.lights import Request
+        # Un vert NS prolonge a 22 s doit stocker 14 s sur la ligne horizontale.
+        for _ in range(440):
+            lights.advance(.05, [Request("02", "NS", 0, 0)], busy=True)
+        window.refresh()
+        self.assertEqual(window.accumulation_labels["EW"].text(), "14.0 s stockees")
+        self.assertEqual(window.accumulation_labels["NS"].text(), "0.0 s stockees")
+        # La pause ne consomme rien ; recommencer remet bien les deux a zero.
+        QTest.qWait(80)
+        window.refresh()
+        self.assertEqual(window.accumulation_labels["EW"].text(), "14.0 s stockees")
+        window.reset_button.click()
+        self.assertEqual(window.accumulation_labels["EW"].text(), "0.0 s stockees")
+        self.assertEqual(window.accumulation_labels["NS"].text(), "0.0 s stockees")
+
     def test_mission_buttons_return_and_reset_reach_the_center(self):
         store = MemoryStore()
         server = CoordinationServer(store, "127.0.0.1", 0)

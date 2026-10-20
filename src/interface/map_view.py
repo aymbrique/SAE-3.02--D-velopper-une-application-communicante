@@ -69,13 +69,24 @@ class MapView(QGraphicsView):
         road_pen = QPen(QColor("gray"), 2 * ROAD_HALF)
         road_pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         marking = QPen(QColor("white"), 2, Qt.PenStyle.DashLine)
+        roads = []
         for first, second in ROAD_SEGMENTS:
-            x1, y1 = NODES[first]
-            x2, y2 = NODES[second]
+            # Continuer aussi dans les marges visibles lorsque la fenetre n'a
+            # pas les proportions du plan. Les trajets restent dans la scene.
+            points = []
+            for key in (first, second):
+                x, y = NODES[key]
+                if x == 0:
+                    x -= SCENE_WIDTH
+                elif x == SCENE_WIDTH:
+                    x += SCENE_WIDTH
+                if y == 0:
+                    y -= SCENE_HEIGHT
+                points.append((x, y))
+            (x1, y1), (x2, y2) = points
+            roads.append((x1, y1, x2, y2))
             self.scene().addLine(x1, y1, x2, y2, road_pen)
-        for first, second in ROAD_SEGMENTS:
-            x1, y1 = NODES[first]
-            x2, y2 = NODES[second]
+        for x1, y1, x2, y2 in roads:
             self.scene().addLine(x1, y1, x2, y2, marking)
         # Enlever les pointilles au milieu des raccordements.
         for key in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"):
@@ -85,7 +96,7 @@ class MapView(QGraphicsView):
 
         # Caserne et allee d'acces, a gauche de l'axe vertical principal.
         self.rectangle(190, 80, 180, 190, "lightgray")
-        self.rectangle(340, 130, CX - 340, 140, "lightgray")
+        self.rectangle(340, 130, CX - ROAD_HALF - 340, 140, "lightgray")
         self.text("CASERNE", 225, 55)
         for identifier, y in PARKING_Y.items():
             self.text("Place " + identifier, 197, y - 9)
@@ -95,7 +106,7 @@ class MapView(QGraphicsView):
         for side, entrance in SITE_ENTRANCES.items():
             x, y = NODES["site_" + side]
             road_y = NODES[entrance][1]
-            self.rectangle(x - 70, y - 90, 140, road_y - y + 90, "lightgray")
+            self.rectangle(x - 70, y - 90, 140, road_y - ROAD_HALF - y + 90, "lightgray")
             px, py = INTERVENTION_POINTS[side]
             self.rectangle(px - 22, py - 14, 44, 28, "#ffe091")
             self.text("Intervention " + DESTINATIONS[side], x - 85, y - 115)

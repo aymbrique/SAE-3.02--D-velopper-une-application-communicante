@@ -11,6 +11,7 @@ STEP = 0.05  # Duree d'un calcul de deplacement, en secondes simulees.
 GAP = 44.0  # Distance minimale entre les centres des vehicules.
 MAX_CARS = 25
 DWELL = 8.0  # Temps passe sur le lieu de l'intervention.
+JUNCTION_LOOKAHEAD = 120.0  # Anticiper la priorite 3 s avant un raccordement.
 
 
 class Simulation:
@@ -117,6 +118,15 @@ class Simulation:
                 # Un secours deja engage garde sa priorite jusqu'au degagement.
                 if vehicle.identifier not in self.crossing_owners and not self._exit_clear(vehicle):
                     continue
+                if vehicle.identifier not in self.crossing_owners:
+                    # Deux secours peuvent rejoindre la meme file au retour.
+                    # Le suiveur ne doit pas verrouiller le vert devant celui
+                    # qui le bloque physiquement et doit passer en premier.
+                    if any(other is not vehicle and other.busy and other.crossing
+                           and other.crossing[2] == vehicle.crossing[2]
+                           and self._blocks_approach(other, vehicle, vehicle.crossing[0])
+                           for other in self.rescues):
+                        continue
                 if vehicle.requested_at is None:
                     vehicle.requested_at = self.time
                 result.append(Request(vehicle.identifier, vehicle.crossing[2],
@@ -195,6 +205,10 @@ class Simulation:
                     return False
         if self.lights.signal(axis) != "green":
             return False
+        if vehicle.kind == "car" and self.lights.owner:
+            rescue = self.get_rescue(self.lights.owner.identifier)
+            if rescue.crossing and not self._blocks_approach(vehicle, rescue, rescue.crossing[0]):
+                return False
         if vehicle.kind != "car" and self.lights.owner and self.lights.owner.identifier != vehicle.identifier:
             return False
         if vehicle.kind != "car" and not self._exit_clear(vehicle):
@@ -260,6 +274,13 @@ class Simulation:
         return target
 
     def _junction_clear(self, vehicle, stop, end, key):
+        priority = self._junction_priority(key)
+        if priority and priority[0] is not vehicle:
+            rescue, rescue_stop = priority
+            # Une voiture sur la voie devant le secours doit d'abord degager,
+            # sinon le secours resterait bloque derriere sa propre priorite.
+            if not self._blocks_approach(vehicle, rescue, rescue_stop):
+                return False
         for other in self.vehicles:
             if other is vehicle or (other.kind != "car" and not other.busy):
                 continue
@@ -271,6 +292,33 @@ class Simulation:
             if not self._clear_path(vehicle, stop + offset):
                 return False
         return True
+
+    def _junction_priority(self, key):
+        """Priorite tant que le secours est occupe, aller ET retour compris."""
+        candidates = []
+        for rescue in self.rescues:
+            if not rescue.busy:
+                continue
+            for stop, end, other_key in rescue.route.junctions:
+                if (other_key == key and rescue.distance < end
+                        and stop - rescue.distance <= JUNCTION_LOOKAHEAD):
+                    candidates.append((rescue, stop))
+                    break
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: (item[0].started_at, item[0].identifier))
+
+    def _blocks_approach(self, vehicle, rescue, stop):
+        """Autoriser les vehicules devant le secours a liberer sa voie d'arrivee."""
+        x, y, _ = vehicle.position
+        distance = rescue.distance
+        while distance <= stop + 1e-9:
+            rx, ry, _ = rescue.route.sample(distance)
+            if hypot(x - rx, y - ry) < GAP:
+                return True
+            distance += 6
+        rx, ry, _ = rescue.route.sample(stop)
+        return hypot(x - rx, y - ry) < GAP
 
     def frame(self):
         states = []

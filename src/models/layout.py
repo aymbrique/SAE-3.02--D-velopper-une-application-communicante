@@ -18,12 +18,12 @@ OPPOSITE = {"N": "S", "S": "N", "E": "W", "W": "E"}
 
 # Les noeuds sont les raccordements des routes. C est le seul carrefour a feux.
 NODES = {
-    "C": (CX, CY), "F": (CX, 200), "north": (CX, 25), "depot": (PARKING_X, 200),
-    "W": (150, CY), "west": (25, CY), "B": (850, CY), "R": (1150, CY),
-    "E": (1400, CY), "east": (1575, CY),
+    "C": (CX, CY), "F": (CX, 200), "north": (CX, 0), "depot": (PARKING_X, 200),
+    "W": (150, CY), "west": (0, CY), "B": (850, CY), "R": (1150, CY),
+    "E": (1400, CY), "east": (SCENE_WIDTH, CY),
     "D": (CX, 950), "L": (150, 950), "Q": (1150, 950),
-    "low_west": (25, 950), "low_east": (1575, 950),
-    "U": (850, 240), "top": (850, 25), "H": (1400, 240), "upper_east": (1575, 240),
+    "low_west": (0, 950), "low_east": (SCENE_WIDTH, 950),
+    "U": (850, 240), "top": (850, 0), "H": (1400, 240), "upper_east": (SCENE_WIDTH, 240),
     "site_W": (150, 420), "site_S": (150, 810),
     "site_N": (1400, 110), "site_E": (1400, 420),
 }

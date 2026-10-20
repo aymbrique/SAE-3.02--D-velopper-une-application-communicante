@@ -4,7 +4,7 @@ Projet de **Aymeri et Selim**, BUT Reseaux & Telecommunications : une simulation
 
 L'interface utilise des formes simples et les boutons standards de Qt. Pour comprendre le code progressivement : [guide de la version simplifiee](docs/code-simple.md).
 
-Le plan du croquis est integre directement dans `main.py` : routes grises, terrain vert, carrefour a feux a gauche, caserne au nord-ouest et quatre aires d'intervention. Les vehicules empruntent les routes de ce plan.
+Le plan du croquis est integre directement dans `main.py` : routes grises, terrain vert, carrefour a feux a gauche, caserne au nord-ouest et quatre aires d'intervention. Les routes existantes vont jusqu'aux bords ; les aires gris clair s'arretent au bord de la chaussee. Les vehicules empruntent les routes de ce plan.
 
 ![Plan de la simulation principale](docs/apercu_plan.png)
 
@@ -29,8 +29,8 @@ Les programmes restent separes : le client joint le centre sur **127.0.0.1:5000*
 - Deplacement calcule a chaque pas de simulation, arret aux feux, files et espacement minimal. Une voiture engagee finit sa traversee.
 - Cycle normal 8 s de vert, 1 s d'orange, au moins 1 s de rouge simultane. Les voitures allant tout droit sur le meme axe peuvent traverser ensemble, en sens opposes et en file avec un ecart minimal de 44 unites. Les virages et les secours restent exclusifs.
 - Choix du secours 01 ou 02 et du point Ouest (1), Sud-Ouest (2), Nord-Est (3) ou Est (4) ; trajet aller/intervention/retour, etats disponibles/occupes et estimations de duree. Chaque trajet franchit le carrefour principal a l'aller et au retour.
-- Demande de priorite a 150 m ou moins **ou** 10 s d'arrivee ou moins. Arbitrage par anciennete de mission, puis de demande, puis identifiant ; maintien jusqu'a la sortie.
-- Memorisation du vert supplementaire, compensation uniquement quand tous les secours sont disponibles, vert compensatoire de 16 s maximum et suspension/reprise lors d'une nouvelle mission.
+- Demande de priorite au feu a 150 m ou moins **ou** 10 s d'arrivee ou moins, aller et retour compris. Arbitrage par anciennete de mission, puis de demande, puis identifiant ; maintien jusqu'a la sortie. Aux raccordements sans feux, les voitures cedent egalement le passage aux secours occupes ; un vehicule deja engage ou devant le secours peut degager.
+- Temps d'accumulation affiche par ligne horizontale et verticale : tout depassement du vert prioritaire au-dela de 8 s est conserve pour l'autre ligne. Compensation uniquement quand tous les secours sont disponibles, au plus 8 s supplementaires par vert (16 s au total), avec report du solde sur les cycles suivants et suspension/reprise lors d'une nouvelle mission.
 - TCP en threads, JSON delimite par lignes, numeros de mise a jour, accuses de reception, reconnexion et suivi des coupures sans changement automatique de l'etat metier.
 - MariaDB : transactions, historique, rejet des doublons et des anciens numeros d'une meme session. Le centre affiche les 100 dernieres mises a jour.
 

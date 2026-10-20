@@ -16,7 +16,7 @@ Les deux listes de choix et le bouton d'envoi se trouvent en haut de la fenetre.
 
 Les estimations utilisent la longueur du trajet et la vitesse de circulation nominale ; elles n'anticipent pas les files et les feux. L'ETA vise toujours le prochain passage, y compris le passage du retour. Le temps de mission ecoule sert a departager les priorites ; ce n'est pas l'ETA.
 
-L'onglet **Reseau** affiche l'adresse, la liaison et le nombre de mises a jour non confirmees. L'onglet **Trafic** affiche les compteurs, les feux et les compensations en attente. `--local` desactive le reseau pour travailler uniquement sur la simulation.
+L'onglet **Reseau** affiche l'adresse, la liaison et le nombre de mises a jour non confirmees. L'onglet **Trafic** affiche les compteurs, les feux et le **Temps d'accumulation**, avec deux reserves en secondes : ligne horizontale (Est-Ouest) et ligne verticale (Nord-Sud). Un vert prioritaire vertical de 22 s stocke par exemple 14 s pour la ligne horizontale. `--local` desactive le reseau pour travailler uniquement sur la simulation.
 
 ## Carte et circulation
 
@@ -26,13 +26,13 @@ Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage init
 
 Les voitures s'arretent au rouge et a l'orange avant d'entrer. Au vert, deux voitures opposees allant tout droit peuvent passer ensemble. Les autres mouvements attendent si le carrefour est occupe ; une sortie bouchee impose toujours l'attente. Une voiture deja engagee finit son passage. L'autre axe n'est ouvert qu'apres degagement et les transitions de securite.
 
-Le carrefour a feux se trouve a gauche du plan. Les raccordements des routes supplementaires, les acces a la caserne et aux interventions sont reserves un vehicule a la fois. Les voitures peuvent donc attendre avant ces zones, meme loin du feu principal. Ces raccordements n'ont pas de feux.
+Le carrefour a feux se trouve a gauche du plan. Les raccordements des routes supplementaires, les acces a la caserne et aux interventions sont reserves un vehicule a la fois. Les voitures y laissent passer les secours en mission, meme au retour a la caserne et meme sans feu. Un vehicule deja engage termine son passage ; une voiture devant le secours avance pour liberer sa voie.
 
 Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Un secours attend que sa sortie soit libre avant de demander la priorite, afin de ne pas bloquer les autres axes.
 
 Les demandes de priorite admissibles sont departagees par mission la plus ancienne, puis demande la plus ancienne, puis identifiant. Une priorite attribuee n'est pas interrompue par l'autre secours. Le second ne passe pas avant le premier, meme si le meme axe est vert.
 
-La compensation ne commence que lorsque tous les secours sont disponibles. Elle ajoute au plus 8 secondes au vert normal de l'axe penalise. Une nouvelle intervention suspend le solde non consomme.
+La compensation ne commence que lorsque tous les secours sont disponibles. Elle ajoute au plus 8 secondes au vert normal de l'axe penalise. Toutes les secondes au-dela de 8 s sont stockees : le solde peut donc depasser 8 s et etre restitue en plusieurs cycles, en alternant les deux lignes. Une nouvelle intervention suspend le solde non consomme. Mettre en pause fige les compteurs ; Recommencer les remet a zero.
 
 ## Centre : centre.py
 

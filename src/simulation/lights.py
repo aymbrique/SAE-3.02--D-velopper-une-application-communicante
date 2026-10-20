@@ -86,7 +86,7 @@ class Lights:
             self.elapsed += dt
             extra = max(0.0, self.elapsed - self.GREEN) - max(0.0, before - self.GREEN)
             if holding:
-                self.debt[self.opposite] = min(8.0, self.debt[self.opposite] + extra)
+                self.debt[self.opposite] += extra
             elif self.compensating:
                 self.debt[self.axis] = max(0.0, self.debt[self.axis] - extra)
             duration = self.GREEN + self.compensation_budget
@@ -105,14 +105,11 @@ class Lights:
             self.elapsed += dt
             if self.elapsed >= self.ALL_RED - 1e-9 and clear:
                 self.axis = self.owner.axis if self.owner else self.opposite
-                if not busy and not self.owner:
-                    for axis in (self.axis, self.opposite):
-                        if self.debt[axis] > 1e-9:
-                            self.axis = axis
-                            break
                 self.phase = "green"
                 self.elapsed = 0.0
                 self.priority_green = False
                 self.finish_green = False
                 self.compensating = not busy and self.debt[self.axis] > 1e-9
-                self.compensation_budget = self.debt[self.axis] if self.compensating else 0.0
+                # Conserver tout le solde, mais distribuer au plus 8 s de bonus
+                # par vert pour ne pas affamer l'autre axe (16 s au total).
+                self.compensation_budget = min(self.GREEN, self.debt[self.axis]) if self.compensating else 0.0

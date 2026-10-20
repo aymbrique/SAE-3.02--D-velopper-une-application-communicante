@@ -41,7 +41,9 @@ La distance minimale entre centres est de **44 unites**, superieure aux dimensio
 
 Le plan est defini dans `layout.py` : `NODES` contient les coordonnees des raccordements et `ROAD_SEGMENTS` relie ces points. Le dessin et les trajets partagent ces donnees. Les parcours sont des listes de noms de points, avec un decalage sur la voie de droite et des virages arrondis. Les origines Nord/Sud/Est/Ouest des voitures designent leur branche d'arrivee au carrefour principal ; une voiture venant de l'Est peut apparaitre sur la route superieure avant de rejoindre cette branche.
 
-Seul le point `C` possede des feux. Aux autres raccordements, une reservation simple autorise un vehicule a la fois : le suivant attend avant la zone tant qu'elle est occupee ou que sa sortie est bouchee. `route.junctions` contient les distances d'entree et de sortie de ces zones sur chaque parcours. La sortie de la caserne et les aires d'intervention sont egalement protegees. Les routes supplementaires peuvent donc provoquer une file en aval du carrefour principal.
+Seul le point `C` possede des feux. Aux autres raccordements, une reservation autorise un vehicule a la fois : le suivant attend avant la zone tant qu'elle est occupee ou que sa sortie est bouchee. Un secours occupe reserve la priorite a 120 unites de l'entree (3 s a sa vitesse nominale), a l'aller comme au retour. Les voitures sur les autres branches attendent ; celles deja engagees finissent leur traversee. Une voiture devant le secours sur sa voie d'approche peut degager pour eviter de l'enfermer derriere la file. Deux secours sont departages par anciennete de mission, puis identifiant. `route.junctions` contient les distances d'entree et de sortie de ces zones sur chaque parcours. La sortie de la caserne et les aires d'intervention sont egalement protegees.
+
+Les extremites ouvertes du reseau atteignent les limites de la scene. Le dessin les prolonge aussi dans les marges de la vue, sans ajouter de branche. L'allee de la caserne finit a `CX - ROAD_HALF` et les aires d'intervention a `road_y - ROAD_HALF` : leur gris clair ne recouvre pas l'asphalte.
 
 Ce choix conservateur limite le debit maximal. Une voiture peut attendre au vert pour respecter une reservation ou un espacement.
 
@@ -53,11 +55,13 @@ L'ETA est la distance restante sur le trajet jusqu'a la prochaine ligne d'arret,
 
 Seuls les secours ayant atteint 150 m ou moins, ou 10 s ou moins, deposent une demande. Sur le nouveau plan, le secours approche du seuil apres avoir quitte sa place de stationnement. Le code et les tests couvrent aussi un secours hors seuil.
 
-L'ordre des demandes est : depart de mission le plus ancien, demande la plus ancienne, identifiant le plus petit. Le choix reste verrouille jusqu'a la sortie pendant la traversee. Avant l'engagement, une sortie bouchee suspend la demande afin que l'autre axe puisse se degager. Une demande plus ancienne ne remplace pas une priorite admissible en cours. Un second secours en sens oppose attend meme si l'axe est vert.
+L'ordre des demandes est : depart de mission le plus ancien, demande la plus ancienne, identifiant le plus petit. Le choix reste verrouille jusqu'a la sortie pendant la traversee. Avant l'engagement, une sortie bouchee suspend la demande afin que l'autre axe puisse se degager. Une demande plus ancienne ne remplace pas une priorite admissible en cours. Les voitures cedent le passage au secours proprietaire du vert, sauf celles devant lui qui doivent liberer sa voie. Un second secours en sens oppose attend meme si l'axe est vert. L'etat `busy` reste vrai jusqu'a la caserne : la visite du point d'intervention ne desactive donc jamais la priorite du retour.
+
+Si deux secours se rejoignent sur la meme voie avant le feu, le suiveur suspend sa demande tant que le secours devant lui doit passer. Cette exception avant engagement empeche qu'un suiveur deja prioritaire bloque la tete de sa propre file. Elle ne retire jamais la priorite d'un vehicule deja engage.
 
 Un changement d'axe passe par 1 seconde d'orange puis au moins 1 seconde de rouge simultane. Le rouge se prolonge si un vehicule est encore engage. Une priorite sur l'axe deja vert peut prolonger ce vert ; deux secours successifs sur cet axe n'en reinitialisent pas la duree.
 
-Le depassement de 8 secondes du vert prioritaire alimente la dette de l'axe oppose. La dette utile est plafonnee a 8 secondes, car une phase compensatoire ne peut depasser 16 secondes. Quand tous les secours sont disponibles, cet axe obtient 8 secondes normales puis la duree compensatoire. Une nouvelle mission suspend la partie compensatoire non consommee ; elle n'est pas effacee.
+Le depassement de 8 secondes du vert prioritaire alimente la dette de l'axe oppose. Chaque seconde supplementaire est conservee, sans plafond sur le solde. Quand tous les secours sont disponibles, cet axe obtient 8 secondes normales puis au plus 8 secondes de compensation : une phase reste limitee a 16 secondes. Le solde restant est restitue aux prochains verts de cet axe, en alternant les axes entre les phases. Une nouvelle mission suspend la partie compensatoire non consommee ; elle n'est pas effacee. L'onglet Trafic affiche directement `debt["EW"]` comme reserve horizontale et `debt["NS"]` comme reserve verticale. Seules les secondes de bonus effectivement ecoulees diminuent ces reserves.
 
 ## Protocole TCP
 

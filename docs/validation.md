@@ -43,12 +43,14 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | Tests | Verification |
 |---|---|
 | `test_demo.py` - 8 tests historiques | Geometrie et chronologie de l'ancienne demonstration. |
-| `test_simulation.py` - 11 tests | Feux, transitions, degagement, arbitrage, seuils, ETA, compensation, interruption/reprise, files, arret au rouge et passage au vert. |
+| `test_simulation.py` - 12 tests | Feux, transitions, degagement, arbitrage, seuils, ETA, accumulation sans perte et restitution sur plusieurs cycles, interruption/reprise, files, arret au rouge et passage au vert. |
 | Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, plusieurs traversees tout droit compatibles sur le meme axe et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
 | `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 95/2,5/2,5, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
 | `test_traffic_flow.py` - 8 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, virages et secours exclusifs, sortie bouchee et attente devant un raccordement secondaire occupe. |
-| `test_interface.py` - 2 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP. |
+| `test_interface.py` - 3 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP ; compteurs horizontal/vertical, pause et remise a zero. |
+| `test_map.py` - 2 tests | Pixels du dessin : gris clair hors de la chaussee, sept extremites ouvertes jusqu'aux bords et absence de nouvelle sortie Sud. |
+| `test_rescue_priority.py` - 8 tests | Priorite aller/retour aux raccordements sans feux, vert au retour, voiture deja engagee, degagement de la file devant un secours, deux secours sur la meme voie et missions apres accumulation du trafic a 60/min. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
 ## Verification sur votre VM
@@ -102,6 +104,16 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 - Conservation du tirage 95/2,5/2,5 et des files tout droit simultanees au carrefour principal. Les raccordements secondaires sont exclusifs et peuvent ralentir la sortie des files.
 - Regressions adaptees aux nouvelles coordonnees : quatre interventions et deux traversees par mission, sortie Nord bouchee, attente puis reprise devant un raccordement secondaire occupe.
 - Inspection graphique locale hors ecran en 1320 x 900 et en 960 x 680, avec et sans affichage du trajet. Capture dans `apercu_plan.png`.
+
+### Priorite sur tout le plan et accumulation du 20 octobre 2026
+
+- Base de travail : derniere version GitHub `cbe0d790d1337daba2722a3fb49a3b43dea86551`, avec le plan du croquis integre.
+- 52 tests hors MariaDB passes sous Python 3.13 : simulation/feux, destinations, fluidite, priorite secours, pixels de la carte, commandes Qt, vrais echanges TCP locaux et demonstration historique. Les deux tests SQL n'ont pas ete rejoues ; le stockage n'a pas change.
+- Les 16 couples de destinations finissent avec du trafic a 40 voitures/minute, sans chevauchement et avec reprise des voitures apres les missions. Essai supplementaire a 60/min, avec missions Nord-Est et Est declenchees apres une minute de trafic deja accumule.
+- Priorite verifiee a l'aller et au retour aux raccordements B/U/H/R/E sans feux, puis aux deux passages au feu principal pour les quatre destinations. Une voiture engagee degage et une voiture devant un secours peut liberer sa voie.
+- Regression de deux secours rejoignant la meme file au retour : le suiveur suspend sa demande avant engagement pour laisser passer la tete de file, meme s'il avait demande le vert auparavant.
+- Accumulation verifiee sur les deux axes : 22 s de vert prioritaire donnent 14 s de reserve opposee. Une reserve de 12 s est restituee en deux bonus de 8 s puis 4 s, avec un vert normal de l'autre ligne entre les deux. Pause, remise a zero et suspension/reprise de compensation verifiees.
+- Controle graphique de 12 046 positions sur les 20 parcours : aucun centre dans l'herbe apres retrait du gris clair des routes. Les sept extremites ouvertes atteignent les bords ; aucune branche ajoutee. Affichage inspecte en 960 x 680 et 1280 x 820 ; capture actualisee dans `apercu_plan.png`.
 
 ### Grille a realiser en TP
 

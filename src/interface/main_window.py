@@ -117,9 +117,16 @@ class MainWindow(QMainWindow):
         self.phase_label = QLabel()
         self.phase_label.setWordWrap(True)
         form.addRow(self.phase_label)
-        self.debt_label = QLabel()
-        self.debt_label.setWordWrap(True)
-        form.addRow(self.debt_label)
+        form.addRow(QLabel("Temps d'accumulation"))
+        self.accumulation_labels = {}
+        for axis, name in (("EW", "Ligne horizontale"), ("NS", "Ligne verticale")):
+            self.accumulation_labels[axis] = QLabel()
+            form.addRow(name, self.accumulation_labels[axis])
+        explanation = QLabel("Au-dela de 8 s de vert prioritaire, les secondes sont "
+                             "stockees pour l'autre ligne, puis restituees quand "
+                             "les deux secours sont disponibles.")
+        explanation.setWordWrap(True)
+        form.addRow(explanation)
         return page
 
     def _build_rescue_tab(self):
@@ -268,7 +275,8 @@ class MainWindow(QMainWindow):
             remaining = "Passage en cours"
         self.phase_label.setText(f"{frame.phase_name}\n{remaining}")
         debt = self.scenario.lights.debt
-        self.debt_label.setText(f"Compensation en attente :\nNord-Sud : {debt['NS']:.1f} s\nEst-Ouest : {debt['EW']:.1f} s")
+        for axis, label in self.accumulation_labels.items():
+            label.setText(f"{debt[axis]:.1f} s stockees")
         self._update_send_button()
         for rescue in frame.rescues:
             self._refresh_rescue(rescue)
