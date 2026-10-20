@@ -123,8 +123,9 @@ class MainWindow(QMainWindow):
             self.accumulation_labels[axis] = QLabel()
             form.addRow(name, self.accumulation_labels[axis])
         explanation = QLabel("Au-dela de 8 s de vert prioritaire, les secondes sont "
-                             "stockees pour l'autre ligne, puis restituees quand "
-                             "les deux secours sont disponibles.")
+                             "stockees pour l'autre ligne. Les deux reserves se "
+                             "compensent ; un quart du solde prolonge chaque "
+                             "prochain vert de la ligne concernee, hors priorite.")
         explanation.setWordWrap(True)
         form.addRow(explanation)
         return page
@@ -173,6 +174,14 @@ class MainWindow(QMainWindow):
         for origin in ("N", "S", "E", "W"):
             for turn in ("straight", "left", "right"):
                 route, stop = car_route(origin, turn)
+                self.route_combo.addItem(route.name, route)
+                if (origin, turn) in (("N", "straight"), ("E", "left"), ("W", "right")):
+                    variant = "lower_west"
+                elif (origin, turn) in (("W", "straight"), ("N", "left"), ("S", "right")):
+                    variant = "middle_north"
+                else:
+                    continue
+                route, stop = car_route(origin, turn, variant=variant)
                 self.route_combo.addItem(route.name, route)
         self.route_combo.setEnabled(False)
         self.route_combo.currentIndexChanged.connect(self._update_route)

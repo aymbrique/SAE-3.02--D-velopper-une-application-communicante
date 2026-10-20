@@ -24,9 +24,9 @@ La carte est volontairement simple : fond vert hors des routes, quatre points d'
 
 Les voitures arrivent depuis l'exterieur des extremites visibles des routes, y compris les marges dues au format de la fenetre. Elles ne sont pas inserees au milieu d'une voie. La moitie des tirages d'arrivee vient du Nord ; les trois autres origines se partagent l'autre moitie. Une entree occupee peut retarder l'apparition.
 
-Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage initial. **Afficher un trajet** : choix parmi les huit parcours de secours (deux vehicules et quatre destinations) et les douze trajets de voiture. Survoler un vehicule affiche son identifiant et sa situation.
+Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage initial. **Afficher un trajet** : choix parmi les huit parcours de secours (deux vehicules et quatre destinations) et les dix-huit trajets de voiture (douze de base et six variantes). Survoler un vehicule affiche son identifiant et sa situation.
 
-Les voitures s'arretent au rouge et a l'orange devant le vrai feu. Au vert, les files tout droit et les mouvements opposes tout droit/a droite peuvent passer ensemble. Les virages a gauche et les mouvements qui se croisent attendent ; une sortie reellement bouchee impose l'attente. Une voiture deja engagee finit son passage. L'autre axe n'est ouvert qu'apres degagement et les transitions de securite.
+Les voitures s'arretent au rouge et a l'orange devant le vrai feu. Au vert, les files suivant le meme mouvement, y compris le meme virage, et les mouvements opposes tout droit/a droite peuvent passer ensemble. Les trajectoires qui se croisent attendent ; une sortie reellement bouchee impose l'attente. Les courbes sont parcourues plus vite pour liberer le passage. Une voiture deja engagee finit son passage. L'autre axe n'est ouvert qu'apres degagement et les transitions de securite.
 
 Le carrefour a feux se trouve a gauche du plan. Devant la caserne et aux autres raccordements sans feux, les voitures qui suivent le meme trajet local ou roulent tout droit en sens opposes avancent ensemble. Les voitures du Nord rejoignent la file du feu principal. Elles cedent le passage lorsqu'un secours approche de l'acces a la caserne, et reprennent des que sa trajectoire est degagee. Cette priorite vaut a l'aller comme au retour. Un vehicule deja engage peut terminer son passage ; une voiture devant le secours avance pour liberer sa voie.
 
@@ -36,7 +36,9 @@ Les quatre destinations possedent un passage aller et un passage retour au carre
 
 Les demandes de priorite admissibles sont departagees par mission la plus ancienne, puis demande la plus ancienne, puis identifiant. Une priorite attribuee n'est pas interrompue par l'autre secours. Le second ne passe pas avant le premier, meme si le meme axe est vert.
 
-La compensation ne commence que lorsque tous les secours sont disponibles. Elle ajoute au plus 8 secondes au vert normal de l'axe penalise. Toutes les secondes au-dela de 8 s sont stockees : le solde peut donc depasser 8 s et etre restitue en plusieurs cycles, en alternant les deux lignes. Une nouvelle intervention suspend le solde non consomme. Mettre en pause fige les compteurs ; Recommencer les remet a zero.
+Des l'envoi en intervention, la ligne verticale est demandee au vert pour vider la file entre caserne et feu. Les voitures en amont de la caserne attendent, celles deja devant degagent. Le secours avance dans l'allee pendant cette vidange et s'insere lorsque le passage est libre. Au retour, il conserve la demande verticale apres le feu principal jusqu'au degagement de l'acces caserne, pour qu'une nouvelle file rouge ne l'enferme pas devant son garage.
+
+Les reserves des deux lignes se compensent en permanence : 17 s verticales et 15 s horizontales deviennent 2 s verticales et 0 s horizontales. Le prochain vert normal vertical dure alors 8 + 0,5 s ; il restera 1,5 s a repartir sur les cycles suivants. Une mission eloignee du carrefour n'empeche pas la restitution. Une demande prioritaire interrompt le bonus sans effacer sa partie non servie ; seuls les bonus effectivement ecoules diminuent le solde. Les petits residus sont soldes avec un dernier bonus d'au plus 0,05 s. Mettre en pause fige les compteurs ; Recommencer les remet a zero.
 
 ## Centre : centre.py
 
@@ -48,4 +50,4 @@ Une coupure change l'indication de liaison, pas l'etat disponible/occupe. Un mes
 
 Le centre ne commande pas les feux : ceux-ci appartiennent au moteur de la simulation. Il affiche et conserve les etats recus.
 
-Le choix aleatoire de direction des voitures utilise 95 % tout droit, 2,5 % gauche, 2,5 % droite. Il s'agit de probabilites, pas de quotas par groupe de dix voitures.
+Au feu principal, le choix aleatoire utilise 95 % tout droit, 2,5 % gauche et 2,5 % droite. Une voiture du Nord peut donc aller vers l'Est ou l'Ouest a ce feu. Parmi les parcours qui continuent vers le Sud, 5 % prennent ensuite la route du bas vers l'Ouest. Parmi ceux qui vont vers l'Est, 5 % tournent au raccordement du milieu vers le Nord. Il s'agit de probabilites conditionnelles, pas de quotas par groupe de voitures.

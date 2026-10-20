@@ -12,7 +12,7 @@ Cette version conserve les fonctions du projet avec une presentation plus sobre 
 - Trajet : une classe avec un constructeur ordinaire ; une boucle cherche le segment sur lequel se trouve le vehicule.
 - Moteur : les controles des acces lateraux ont leurs propres fonctions. Les callbacks des boutons sont des methodes nommees.
 
-Les missions proposent maintenant quatre destinations ; la circulation permet aux voitures allant tout droit sur le meme axe de traverser en sens opposes et de se suivre sans attendre la sortie complete du leader, avec le meme espacement de securite. Les vitesses et la compensation sont conservees. Le reseau conserve la reconnexion et les confirmations de reception. MariaDB conserve l'etat courant et l'historique. Le dessin n'utilise plus les couleurs individuelles des voitures, ni le clignotement decoratif des gyrophares.
+Les missions proposent quatre destinations. Les files suivant le meme mouvement se suivent au carrefour, meme en virage ; les mouvements opposes tout droit/a droite restent compatibles, avec le meme espacement de securite. Les voitures parcourent les courbes plus vite et certains trajets bifurquent rarement vers l'Ouest en bas ou le Nord au milieu du plan. La sortie et le retour a la caserne anticipent le vert vertical. Les reserves des deux lignes s'annulent et le solde est rembourse par quarts aux prochains verts normaux. Le reseau conserve la reconnexion et les confirmations de reception. MariaDB conserve l'etat courant et l'historique. Le dessin n'utilise plus les couleurs individuelles des voitures, ni le clignotement decoratif des gyrophares.
 
 ## Dans quel ordre lire les fichiers ?
 

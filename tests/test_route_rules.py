@@ -6,7 +6,7 @@ import unittest
 
 from src.models.layout import (
     CLEARANCE, DESTINATIONS, NODES, PARKING_X, PARKING_Y, ROAD_SEGMENTS,
-    SCENE_HEIGHT, SCENE_WIDTH, SITE_ENTRANCES, STOP_DISTANCE, TURN_DISTANCE,
+    ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH, SITE_ENTRANCES, STOP_DISTANCE, TURN_DISTANCE,
     build_route, car_route, direction, lane_point, rescue_route,
 )
 
@@ -25,11 +25,16 @@ class RouteRulesTests(unittest.TestCase):
 
     def assert_movements_match_geometry(self, route):
         expected = {}
+        expected_turns = []
         for index, key in enumerate(route.nodes[1:-1], 1):
-            if key == "C" or key.startswith("site_"):
+            if key.startswith("site_"):
                 continue
             incoming = direction(NODES[route.nodes[index - 1]], NODES[key])
             outgoing = direction(NODES[key], NODES[route.nodes[index + 1]])
+            if incoming != outgoing:
+                expected_turns.append((key, incoming, outgoing))
+            if key == "C":
+                continue
             expected.setdefault(key, []).append((incoming, outgoing))
         movement_keys = set()
         for stop, end, key in route.junctions:
@@ -49,6 +54,19 @@ class RouteRulesTests(unittest.TestCase):
                 self.assertAlmostEqual(actual, wanted)
         self.assertEqual(set(route.junction_movements), movement_keys)
         self.assertTrue(all(not movements for movements in expected.values()))
+        self.assertEqual(len(route.turn_zones), len(expected_turns))
+        last_end = 0
+        for (start, end), (key, incoming, outgoing) in zip(route.turn_zones, expected_turns):
+            self.assertGreaterEqual(start, last_end)
+            self.assertGreater(end, start)
+            self.assertLessEqual(end, route.length)
+            for actual, wanted in zip(route.sample(start)[:2],
+                                      lane_point(NODES[key], incoming, -TURN_DISTANCE)):
+                self.assertAlmostEqual(actual, wanted)
+            for actual, wanted in zip(route.sample(end)[:2],
+                                      lane_point(NODES[key], outgoing, TURN_DISTANCE)):
+                self.assertAlmostEqual(actual, wanted)
+            last_end = end
 
     def test_all_twelve_car_routes_follow_allowed_roads_and_leave_at_edges(self):
         for origin, turn in product("NSEW", ("straight", "left", "right")):
@@ -59,6 +77,7 @@ class RouteRulesTests(unittest.TestCase):
                 self.assertEqual(stop, route.crossings[0][0])
                 self.assert_legal_edges(route)
                 self.assert_movements_match_geometry(route)
+                self.assert_route_stays_on_existing_roads(route)
                 for x, y in (route.points[0], route.points[-1]):
                     self.assertTrue(x < 0 or x > SCENE_WIDTH or y < 0 or y > SCENE_HEIGHT)
 
@@ -109,6 +128,87 @@ class RouteRulesTests(unittest.TestCase):
         self.assert_movements_match_geometry(route)
         stop, _, key = next(zone for zone in route.junctions if zone[2] == "R")
         self.assertEqual(route.junction_movements[(stop, key)], ((1, 0), (1, 0)))
+
+    def assert_route_stays_on_existing_roads(self, route):
+        for distance in range(0, int(route.length) + 1, 3):
+            x, y, _ = route.sample(distance)
+            if not (0 <= x <= SCENE_WIDTH and 0 <= y <= SCENE_HEIGHT):
+                continue
+            on_road = False
+            for first, second in ROAD_SEGMENTS:
+                ax, ay = NODES[first]
+                bx, by = NODES[second]
+                if ax == bx:
+                    on_road |= abs(x - ax) <= ROAD_HALF and min(ay, by) <= y <= max(ay, by)
+                else:
+                    on_road |= abs(y - ay) <= ROAD_HALF and min(ax, bx) <= x <= max(ax, bx)
+            # Le dessin prolonge les raccordements par un carre de chaussee.
+            on_road |= any(abs(x - NODES[key][0]) <= ROAD_HALF and
+                           abs(y - NODES[key][1]) <= ROAD_HALF
+                           for key in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"))
+            self.assertTrue(on_road, (route.name, distance, x, y))
+
+    def test_secondary_variants_stay_on_roads_and_finish_outside_map(self):
+        variants = {
+            "lower_west": (("N", "straight"), ("W", "right"), ("E", "left")),
+            "middle_north": (("W", "straight"), ("N", "left"), ("S", "right")),
+        }
+        for variant, choices in variants.items():
+            for origin, turn in choices:
+                with self.subTest(variant=variant, origin=origin, turn=turn):
+                    route, stop = car_route(origin, turn, variant=variant)
+                    self.assertEqual(route.variant, variant)
+                    self.assertEqual(route.nodes.count("C"), 1)
+                    self.assertEqual(len(route.crossings), 1)
+                    self.assertEqual(stop, route.crossings[0][0])
+                    self.assert_legal_edges(route)
+                    self.assert_movements_match_geometry(route)
+                    self.assert_route_stays_on_existing_roads(route)
+                    for x, y in (route.points[0], route.points[-1]):
+                        self.assertTrue(x < 0 or x > SCENE_WIDTH or y < 0 or y > SCENE_HEIGHT)
+                    if variant == "lower_west":
+                        self.assertEqual(route.nodes[-4:], ("C", "D", "L", "low_west"))
+                        self.assertLess(route.points[-1][0], 0)
+                    else:
+                        self.assertEqual(route.nodes[-4:], ("C", "B", "U", "top"))
+                        self.assertLess(route.points[-1][1], 0)
+
+    def test_secondary_turns_have_expected_directions(self):
+        for origin, turn, variant, key, expected in (
+                ("N", "straight", "lower_west", "D", ((0, 1), (-1, 0))),
+                ("W", "straight", "middle_north", "B", ((1, 0), (0, -1)))):
+            with self.subTest(variant=variant):
+                route, _ = car_route(origin, turn, variant=variant)
+                stop, _, _ = next(zone for zone in route.junctions if zone[2] == key)
+                self.assertEqual(route.junction_movements[(stop, key)], expected)
+
+    def test_main_crossing_north_turns_and_east_to_north_remain_available(self):
+        for origin, turn, expected in (("N", "left", ("F", "C", "B")),
+                                       ("N", "right", ("F", "C", "W")),
+                                       ("E", "right", ("B", "C", "F"))):
+            with self.subTest(origin=origin, turn=turn):
+                route, _ = car_route(origin, turn)
+                index = route.nodes.index("C")
+                self.assertEqual(route.nodes[index - 1:index + 2], expected)
+                self.assertIsNone(route.variant)
+                self.assert_route_stays_on_existing_roads(route)
+
+    def test_secondary_variants_reject_unknown_or_incompatible_choices(self):
+        for origin, turn, variant in (("N", "right", "lower_west"),
+                                      ("E", "straight", "middle_north"),
+                                      ("N", "straight", "inconnue")):
+            with self.subTest(origin=origin, turn=turn, variant=variant):
+                with self.assertRaises(ValueError):
+                    car_route(origin, turn, variant=variant)
+
+    def test_secondary_variants_respect_extended_visible_bounds(self):
+        bounds = (-250, -200, SCENE_WIDTH + 250, SCENE_HEIGHT + 200)
+        for variant, origin in (("lower_west", "N"), ("middle_north", "W")):
+            with self.subTest(variant=variant):
+                route, _ = car_route(origin, "straight", bounds, variant=variant)
+                for x, y in (route.points[0], route.points[-1]):
+                    self.assertTrue(x < bounds[0] or x > bounds[2] or
+                                    y < bounds[1] or y > bounds[3])
 
 
 if __name__ == "__main__":

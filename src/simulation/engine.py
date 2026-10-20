@@ -13,6 +13,7 @@ GAP = 44.0  # Distance minimale entre les centres des vehicules.
 MAX_CARS = 25
 DWELL = 8.0  # Temps passe sur le lieu de l'intervention.
 JUNCTION_LOOKAHEAD = 120.0  # Anticiper la priorite 3 s avant un raccordement.
+TURN_SPEED_FACTOR = 40 / 28  # Degager les virages plus vite que l'allure de croisiere.
 
 
 class Simulation:
@@ -83,13 +84,24 @@ class Simulation:
             return "left"
         return "right"
 
-    def spawn(self, origin=None, turn=None):
+    def choose_variant(self, origin, turn):
+        # Un trajet sur vingt bifurque au raccordement situe apres le feu.
+        if (origin, turn) in (("N", "straight"), ("E", "left"), ("W", "right")):
+            return "lower_west" if self.random.randrange(20) == 0 else None
+        if (origin, turn) in (("W", "straight"), ("N", "left"), ("S", "right")):
+            return "middle_north" if self.random.randrange(20) == 0 else None
+        return None
+
+    def spawn(self, origin=None, turn=None, *, variant=None):
         if len(self.cars) >= MAX_CARS:
             return None
         # Une arrivee sur deux vient du Nord ; les trois autres se partagent le reste.
         origin = origin or self.random.choice(("N", "N", "N", "S", "E", "W"))
+        automatic_turn = turn is None
         turn = turn or self.choose_turn()
-        route, stop = car_route(origin, turn, self.traffic_bounds)
+        if automatic_turn and variant is None:
+            variant = self.choose_variant(origin, turn)
+        route, stop = car_route(origin, turn, self.traffic_bounds, variant=variant)
         x, y, _ = route.sample(0)
         for other in self.vehicles:
             other_x, other_y, angle = other.position
@@ -117,10 +129,12 @@ class Simulation:
         result = []
         for vehicle in self.rescues:
             distance, eta = self.approach(vehicle)
-            if distance is not None and (distance <= 150 or eta <= 10):
+            returning_to_station = self._returning_station(vehicle)
+            if returning_to_station or (distance is not None and (
+                    distance <= 150 or eta <= 10 or self._leaving_station(vehicle))):
                 # Demander le vert des l'approche, meme si la sortie est encore
                 # occupee. Le controle d'entree impose toujours sa liberation.
-                if vehicle.identifier not in self.crossing_owners:
+                if vehicle.crossing and vehicle.identifier not in self.crossing_owners:
                     # Deux secours peuvent rejoindre la meme file au retour.
                     # Le suiveur ne doit pas verrouiller le vert devant celui
                     # qui le bloque physiquement et doit passer en premier.
@@ -131,9 +145,28 @@ class Simulation:
                         continue
                 if vehicle.requested_at is None:
                     vehicle.requested_at = self.time
-                result.append(Request(vehicle.identifier, vehicle.crossing[2],
+                axis = "NS" if returning_to_station else vehicle.crossing[2]
+                result.append(Request(vehicle.identifier, axis,
                                       vehicle.started_at, vehicle.requested_at))
         return result
+
+    def _leaving_station(self, vehicle):
+        """Des le depart, degager la file Nord avant d'inserer le secours."""
+        if not vehicle.busy or vehicle.visited or vehicle.crossing_index != 0:
+            return False
+        station_exit = next(end for _, end, key in vehicle.route.junctions if key == "F")
+        return vehicle.distance < station_exit
+
+    def _returning_station(self, vehicle):
+        """Conserver le vert Nord jusqu'au degagement du retour a la caserne.
+
+        Une file Nord au rouge pourrait sinon emprisonner le premier secours
+        devant F, boucher la sortie du carrefour et bloquer le second secours.
+        """
+        if not vehicle.busy or not vehicle.visited or vehicle.crossing is not None:
+            return False
+        station_end = [end for _, end, key in vehicle.route.junctions if key == "F"][-1]
+        return vehicle.distance < station_end
 
     def advance(self, duration):
         if not isfinite(duration) or duration < 0:
@@ -190,7 +223,7 @@ class Simulation:
         if first.kind != "car" or second.kind != "car" or first.origin not in OPPOSITE:
             return False
         if second.origin == first.origin:
-            return first.turn == second.turn == "straight"
+            return first.turn == second.turn
         return (second.origin == OPPOSITE[first.origin]
                 and first.turn in ("straight", "right")
                 and second.turn in ("straight", "right"))
@@ -267,7 +300,11 @@ class Simulation:
             vehicle.waiting = True
             return
         old = vehicle.distance
-        target = min(old + vehicle.speed * STEP, vehicle.route.length)
+        speed = vehicle.speed
+        if vehicle.kind == "car" and any(start <= old < end
+                                         for start, end in vehicle.route.turn_zones):
+            speed *= TURN_SPEED_FACTOR
+        target = min(old + speed * STEP, vehicle.route.length)
         target = self._limit_at_junctions(vehicle, old, target)
         crossing = vehicle.crossing
         entering = crossing is not None and old <= crossing[0] and target > crossing[0]
@@ -328,8 +365,15 @@ class Simulation:
                     if self._junction_still_conflicts(
                             vehicle, stop, end, key, other, other_stop, other_end):
                         return False
+        # Le garage ne reserve que son allee : l'insertion est controlee a F.
+        # Sinon une file deja en train de degager F immobilise encore le secours
+        # sur sa place, alors que son trajet jusqu'a la ligne d'insertion est libre.
+        sweep_end, margin = end, 46
+        if key == "parking" and stop == 0:
+            sweep_end = next(start for start, _, name in vehicle.route.junctions if name == "F")
+            margin = 1
         # Controler aussi la sortie avant d'engager le vehicule.
-        for offset in range(0, int(end - stop) + 46, 6):
+        for offset in range(0, int(sweep_end - stop) + margin, 6):
             if not self._clear_path(vehicle, stop + offset, following):
                 return False
         return True
@@ -380,8 +424,9 @@ class Simulation:
             if not rescue.busy:
                 continue
             for stop, end, other_key in rescue.route.junctions:
+                station_departure = key == "F" and self._leaving_station(rescue)
                 if (other_key == key and rescue.distance < end
-                        and stop - rescue.distance <= JUNCTION_LOOKAHEAD):
+                        and (stop - rescue.distance <= JUNCTION_LOOKAHEAD or station_departure)):
                     candidates.append((rescue, stop))
                     break
         if not candidates:

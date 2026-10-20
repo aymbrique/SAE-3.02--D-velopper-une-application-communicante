@@ -185,7 +185,7 @@ Pour ne pas retaper l'adresse, renseigner `serveur` et `port` dans la section `[
 2. Choisir le secours 01 et une destination, puis cliquer sur **Envoyer en intervention**. Le centre doit afficher `occupe` pour 01 uniquement.
 3. Envoyer le secours 02. Verifier que les deux lignes restent independantes.
 4. Observer la priorite, les transitions et le retour des secours. Chaque secours redevient disponible a son retour a la caserne.
-5. Une fois les deux missions finies, observer la compensation si du vert supplementaire a ete memorise.
+5. Observer la compensation aux verts sans demande prioritaire : reserves opposees annulees, puis un quart du solde restitue a chaque cycle de sa ligne. Elle peut commencer pendant une mission eloignee du carrefour.
 6. Fermer la simulation : le centre indique une liaison interrompue en conservant les derniers etats.
 7. Relancer la simulation : la liaison se retablit et une nouvelle session apparait dans l'historique.
 8. Fermer puis relancer le centre : l'historique reste en base. Si la simulation est ouverte, elle se reconnecte automatiquement.

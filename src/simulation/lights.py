@@ -15,6 +15,8 @@ class Lights:
     GREEN = 8.0
     AMBER = 1.0
     ALL_RED = 1.0
+    COMPENSATION_SHARE = 0.25
+    COMPENSATION_MIN = 0.05
 
     def __init__(self):
         self.axis = "NS"
@@ -58,9 +60,20 @@ class Lights:
     def _priority_order(self, request):
         return (request.started_at, request.requested_at, request.identifier)
 
+    def _net_debt(self):
+        # Chaque solde appartient a l'axe qui doit recevoir du vert en plus.
+        # Deux retards opposes se compensent : seul leur ecart reste du.
+        common = min(self.debt.values())
+        for axis in self.debt:
+            self.debt[axis] = max(0.0, self.debt[axis] - common)
+            if self.debt[axis] < 1e-9:
+                self.debt[axis] = 0.0
+
     def advance(self, dt, requests=(), busy=False, clear=True):
-        # requests : demandes proches du carrefour ; busy : un secours est occupe.
+        # requests : demandes proches du carrefour. busy reste accepte pour les
+        # appelants, mais une mission lointaine n'empeche pas la compensation.
         # clear : aucun vehicule n'est encore engage dans le carrefour.
+        self._net_debt()
         previous = self.owner
         if self.owner:
             # Garder le meme secours, mais actualiser son axe au prochain passage.
@@ -69,10 +82,11 @@ class Lights:
         if self.owner is None and requests:
             # Plus ancienne mission, puis plus ancienne demande, puis identifiant.
             self.owner = min(requests, key=self._priority_order)
-        if self.compensating and busy:
+        if self.compensating and self.owner is not None:
+            # Le bonus non encore servi reste en dette. Le temps deja servi
+            # ne devient pas retroactivement une prolongation prioritaire.
             self.compensating = False
             self.compensation_budget = 0.0
-            self.finish_green = True
 
         if self.phase == "green":
             holding = self.owner is not None and self.owner.axis == self.axis
@@ -87,7 +101,10 @@ class Lights:
             if holding:
                 self.debt[self.opposite] += extra
             elif self.compensating:
-                self.debt[self.axis] = max(0.0, self.debt[self.axis] - extra)
+                served = (min(max(0.0, self.elapsed - self.GREEN), self.compensation_budget)
+                          - min(max(0.0, before - self.GREEN), self.compensation_budget))
+                self.debt[self.axis] = max(0.0, self.debt[self.axis] - served)
+            self._net_debt()
             duration = self.GREEN + self.compensation_budget
             ended = self.elapsed >= duration - 1e-9
             interrupted = self.finish_green and (self.priority_green or self.elapsed >= self.GREEN - 1e-9)
@@ -109,7 +126,10 @@ class Lights:
                 self.elapsed = 0.0
                 self.priority_green = False
                 self.finish_green = False
-                self.compensating = not busy and self.debt[self.axis] > 1e-9
-                # Conserver tout le solde, mais distribuer au plus 8 s de bonus
-                # par vert pour ne pas affamer l'autre axe (16 s au total).
-                self.compensation_budget = min(self.GREEN, self.debt[self.axis]) if self.compensating else 0.0
+                self.compensating = self.owner is None and self.debt[self.axis] > 1e-9
+                # Rembourser un quart du solde par vert normal. Le minimum
+                # d'un pas de simulation permet de solder les petits residus.
+                self.compensation_budget = (
+                    min(self.debt[self.axis], max(self.COMPENSATION_MIN,
+                                                 self.debt[self.axis] * self.COMPENSATION_SHARE))
+                    if self.compensating else 0.0)

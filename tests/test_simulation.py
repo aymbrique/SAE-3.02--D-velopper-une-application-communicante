@@ -65,29 +65,28 @@ class LightsTests(unittest.TestCase):
         tick(lights, 2, [Request("01", "EW", 0, 1)], True)
         self.assertEqual(lights.signal("EW"), "green")
 
-    def test_continuous_priority_debt_and_compensation_cap(self):
+    def test_continuous_priority_debt_and_quarter_compensation(self):
         lights = Lights()
         tick(lights, 10, [Request("01", "NS", 0, 0)], True)
         tick(lights, 10, [Request("02", "NS", 1, 1)], True)
         self.assertAlmostEqual(lights.debt["EW"], 12)
         tick(lights, 2.05, busy=True)
         self.assertEqual(lights.signal("EW"), "green")
-        self.assertFalse(lights.compensating)
-        tick(lights, 20, busy=False)
         self.assertTrue(lights.compensating)
-        self.assertEqual(lights.axis, "EW")
-        self.assertAlmostEqual(lights.compensation_budget, 8)
-        tick(lights, 16)
-        self.assertAlmostEqual(lights.debt["EW"], 4)
+        self.assertAlmostEqual(lights.compensation_budget, 3)
+        tick(lights, 8)
+        self.assertAlmostEqual(lights.debt["EW"], 12)
+        tick(lights, 3)
+        self.assertAlmostEqual(lights.debt["EW"], 9)
         self.assertEqual(lights.phase, "amber")
         tick(lights, 2)
         self.assertEqual(lights.axis, "NS")
         self.assertFalse(lights.compensating)
         tick(lights, 10)
         self.assertEqual(lights.axis, "EW")
-        self.assertAlmostEqual(lights.compensation_budget, 4)
-        tick(lights, 12)
-        self.assertAlmostEqual(lights.debt["EW"], 0)
+        self.assertAlmostEqual(lights.compensation_budget, 2.25)
+        tick(lights, 10.25)
+        self.assertAlmostEqual(lights.debt["EW"], 6.75)
         self.assertEqual(lights.phase, "amber")
 
     def test_accumulation_on_either_axis_and_no_double_counting(self):
@@ -102,28 +101,141 @@ class LightsTests(unittest.TestCase):
                 self.assertAlmostEqual(lights.debt[opposite], 14)
                 self.assertEqual(lights.debt[axis], 0)
                 tick(lights, 2.05, busy=True)
-                balance = dict(lights.debt)
-                tick(lights, 40, busy=True)
-                self.assertEqual(lights.debt, balance)
+                self.assertTrue(lights.compensating)
+                tick(lights, 8, busy=True)
+                self.assertAlmostEqual(lights.debt[opposite], 14)
+                tick(lights, 1, busy=True)
+                self.assertAlmostEqual(lights.debt[opposite], 13)
+                self.assertEqual(lights.debt[axis], 0)
 
-    def test_compensation_only_when_all_available_and_suspend_resume(self):
+    def test_mission_away_from_crossing_does_not_delay_compensation(self):
         lights = Lights()
-        tick(lights, 13, [Request("01", "NS", 0, 0)], True)
-        self.assertAlmostEqual(lights.debt["EW"], 5)
-        tick(lights, 2.05)
+        tick(lights, 12, [Request("01", "NS", 0, 0)], True)
+        tick(lights, 2.05, busy=True)
         self.assertTrue(lights.compensating)
-        tick(lights, 10)
+        self.assertAlmostEqual(lights.compensation_budget, 1)
+        tick(lights, 9, busy=True)
         self.assertAlmostEqual(lights.debt["EW"], 3)
-        tick(lights, .05, busy=True)
-        self.assertFalse(lights.compensating)
         self.assertEqual(lights.phase, "amber")
-        remaining = lights.debt["EW"]
-        tick(lights, 22, busy=True)
-        self.assertAlmostEqual(lights.debt["EW"], remaining)
+
+    def test_opposite_balances_cancel_before_planning_bonus(self):
+        lights = Lights()
+        lights.debt.update(NS=17, EW=15)
+        tick(lights, .05)
+        self.assertEqual(lights.debt, {"NS": 2, "EW": 0})
+        tick(lights, 9.95)
+        self.assertEqual(lights.axis, "EW")
+        self.assertFalse(lights.compensating)
         tick(lights, 10)
+        self.assertEqual(lights.axis, "NS")
+        self.assertAlmostEqual(lights.compensation_budget, .5)
+        tick(lights, 8.5)
+        self.assertAlmostEqual(lights.debt["NS"], 1.5)
+
+    def test_equal_balances_cancel_completely(self):
+        lights = Lights()
+        lights.debt.update(NS=15, EW=15)
+        tick(lights, 30)
+        self.assertEqual(lights.debt, {"NS": 0, "EW": 0})
+        self.assertFalse(lights.compensating)
+
+    def test_priority_interrupt_preserves_unserved_bonus(self):
+        lights = Lights()
+        lights.debt["EW"] = 8
+        tick(lights, 10)
+        self.assertEqual(lights.axis, "EW")
+        self.assertAlmostEqual(lights.compensation_budget, 2)
+        tick(lights, 9)
+        self.assertAlmostEqual(lights.debt["EW"], 7)
+        tick(lights, .05, [Request("01", "NS", 0, 0)], True)
+        self.assertEqual(lights.phase, "amber")
+        self.assertFalse(lights.compensating)
+        self.assertAlmostEqual(lights.debt["EW"], 7)
+        tick(lights, 2, [Request("01", "NS", 0, 0)], True)
+        self.assertEqual(lights.signal("NS"), "green")
+        tick(lights, 1, [Request("01", "NS", 0, 0)], True)
+        tick(lights, 2.05)
+        self.assertEqual(lights.axis, "EW")
         self.assertTrue(lights.compensating)
-        tick(lights, 11)
+        self.assertAlmostEqual(lights.compensation_budget, 1.75)
+
+    def test_same_axis_priority_does_not_recount_served_compensation(self):
+        lights = Lights()
+        lights.debt["EW"] = 8
+        tick(lights, 10)
+        tick(lights, 9)
+        self.assertAlmostEqual(lights.debt["EW"], 7)
+        tick(lights, 1, [Request("01", "EW", 0, 0)], True)
+        self.assertFalse(lights.compensating)
+        # Une seule seconde de priorite nouvelle compense une seconde du solde.
+        # La seconde de bonus deja servie ne doit pas etre recomptee.
+        self.assertAlmostEqual(lights.debt["EW"], 6)
+        self.assertEqual(lights.debt["NS"], 0)
+
+    def test_small_balance_is_fully_repaid_after_finite_cycles(self):
+        lights = Lights()
+        lights.debt["EW"] = .12
+        for _ in range(1200):
+            lights.advance(.05)
+            if not any(lights.debt.values()):
+                break
+        self.assertEqual(lights.debt, {"NS": 0, "EW": 0})
+        tick(lights, 20)
+        self.assertFalse(lights.compensating)
+        self.assertEqual(lights.compensation_budget, 0)
+
+    def test_bonus_does_not_subtract_more_than_its_budget(self):
+        lights = Lights()
+        lights.debt["EW"] = 1.01
+        tick(lights, 10)
+        self.assertAlmostEqual(lights.compensation_budget, .2525)
+        tick(lights, 8.3)
+        self.assertEqual(lights.phase, "amber")
+        self.assertAlmostEqual(lights.debt["EW"], .7575)
+
+    def test_priority_before_bonus_keeps_all_unserved_debt(self):
+        lights = Lights()
+        lights.debt["EW"] = 8
+        tick(lights, 10)
+        tick(lights, 2)
+        tick(lights, .05, [Request("01", "EW", 0, 0)], True)
+        self.assertFalse(lights.compensating)
+        self.assertAlmostEqual(lights.debt["EW"], 8)
+        tick(lights, .05)
+        self.assertEqual(lights.phase, "amber")
+        tick(lights, 12)
+        self.assertEqual(lights.axis, "EW")
+        self.assertAlmostEqual(lights.compensation_budget, 2)
+        tick(lights, 10)
+        self.assertAlmostEqual(lights.debt["EW"], 6)
+
+    def test_short_priority_then_clearance_does_not_pay_during_red(self):
+        lights = Lights()
+        lights.debt["EW"] = 4
+        request = [Request("01", "NS", 0, 0)]
+        tick(lights, 1, request, True)
+        tick(lights, .05)
+        tick(lights, 1)
+        self.assertEqual(lights.phase, "all_red")
+        tick(lights, 3, clear=False)
+        self.assertEqual(lights.phase, "all_red")
+        self.assertAlmostEqual(lights.debt["EW"], 4)
+        tick(lights, .05)
+        self.assertEqual(lights.axis, "EW")
+        self.assertAlmostEqual(lights.compensation_budget, 1)
+        tick(lights, 9)
+        self.assertAlmostEqual(lights.debt["EW"], 3)
+
+    def test_new_priority_accumulation_nets_existing_opposite_balance(self):
+        lights = Lights()
+        lights.debt["NS"] = 2
+        request = [Request("01", "NS", 0, 0)]
+        tick(lights, 9, request, True)
+        self.assertAlmostEqual(lights.debt["NS"], 1)
         self.assertAlmostEqual(lights.debt["EW"], 0)
+        tick(lights, 2, request, True)
+        self.assertAlmostEqual(lights.debt["NS"], 0)
+        self.assertAlmostEqual(lights.debt["EW"], 1)
 
     def test_no_debt_for_short_priority(self):
         lights = Lights()
@@ -139,6 +251,9 @@ class SimulationTests(unittest.TestCase):
         sim.start_mission("01")
         vehicle = sim.rescues[0]
         vehicle.crossings = ((2000, 2200, "NS"),)
+        # La sortie de caserne demande desormais le vert sans attendre le seuil.
+        # Tester la regle d'approche une fois cette sortie deja franchie.
+        vehicle.distance = next(end for _, end, key in vehicle.route.junctions if key == "F")
         self.assertEqual(sim.requests(), [])
         vehicle.distance = 1700
         self.assertEqual(sim.approach(vehicle), (150, 7.5))

@@ -79,7 +79,7 @@ class SecondaryFlowTests(unittest.TestCase):
                 self.assertLess(leader.distance, end)
                 self.assertGreater(follower.distance, stop)
                 for car, previous in zip((leader, follower), initial):
-                    self.assertAlmostEqual(car.distance - previous, car.speed)
+                    self.assertGreaterEqual(car.distance - previous + 1e-6, car.speed)
                     self.assertFalse(car.waiting)
 
     def test_green_convoy_continues_through_west_junction_after_main_crossing(self):

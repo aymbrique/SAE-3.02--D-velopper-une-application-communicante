@@ -73,6 +73,7 @@ def build_route(name, nodes, parking_y=None, traffic_bounds=None):
     crossing_indexes = []
     junction_indexes = []
     junction_directions = []
+    turn_indexes = []
     hospital_index = None
     depot_exit_index = None
     depot_return_index = None
@@ -99,10 +100,12 @@ def build_route(name, nodes, parking_y=None, traffic_bounds=None):
         if incoming == outgoing:
             points.append(end)
         else:
+            turn_start = len(points) - 1
             control1 = (points[-1][0] + incoming[0] * 64,
                         points[-1][1] + incoming[1] * 64)
             control2 = (end[0] - outgoing[0] * 64, end[1] - outgoing[1] * 64)
             points.extend(bezier(points[-1], control1, control2, end))
+            turn_indexes.append((turn_start, len(points) - 1))
         if key == "C":
             axis = "NS" if incoming[0] == 0 else "EW"
             crossing_indexes.append((start, len(points) - 1, axis))
@@ -127,6 +130,8 @@ def build_route(name, nodes, parking_y=None, traffic_bounds=None):
 
     route = Route(name, points)
     route.nodes = tuple(nodes)
+    route.turn_zones = [(route.distances[start], route.distances[end])
+                        for start, end in turn_indexes]
     route.crossings = []
     for start, end, axis in crossing_indexes:
         route.crossings.append((route.distances[start], route.distances[end] + CLEARANCE, axis))
@@ -160,7 +165,8 @@ def outside_road(point, heading, bounds, entering=False):
     return x, y
 
 
-def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT)):
+def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT), *, variant=None):
+    """Choisir le virage a C et, en option, une bifurcation plus loin sur le plan."""
     approaches = {
         "N": ["north", "F", "C"], "W": ["west", "W", "C"],
         "E": ["upper_east", "H", "U", "B", "C"],
@@ -179,8 +185,24 @@ def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT)):
     }
     names = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
     movements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
-    nodes = approaches[origin] + exits[destinations[origin][turn]][1:]
-    route = build_route(f"{names[origin]} - {movements[turn]}", nodes, traffic_bounds=traffic_bounds)
+    destination = destinations[origin][turn]
+    exit_nodes = exits[destination]
+    suffix = ""
+    if variant == "lower_west":
+        if destination != "S":
+            raise ValueError("La bifurcation Ouest de D exige une sortie Sud au carrefour C.")
+        exit_nodes = ["C", "D", "L", "low_west"]
+        suffix = " - Ouest par la route du bas"
+    elif variant == "middle_north":
+        if destination != "E":
+            raise ValueError("La bifurcation Nord de B exige une sortie Est au carrefour C.")
+        exit_nodes = ["C", "B", "U", "top"]
+        suffix = " - Nord par la route du milieu"
+    elif variant is not None:
+        raise ValueError("Bifurcation de voiture inconnue")
+    nodes = approaches[origin] + exit_nodes[1:]
+    route = build_route(f"{names[origin]} - {movements[turn]}{suffix}", nodes, traffic_bounds=traffic_bounds)
+    route.variant = variant
     return route, route.crossings[0][0]
 
 

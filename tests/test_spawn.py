@@ -41,3 +41,40 @@ class SpawnTests(unittest.TestCase):
         self.assertTrue(5700 < counts["N"] < 6300, counts)
         for origin in ("S", "E", "W"):
             self.assertTrue(1700 < counts[origin] < 2300, counts)
+
+    def test_generated_north_cars_include_rare_west_and_east_choices(self):
+        sim = Simulation(rate=0)
+        counts = Counter()
+        for _ in range(6000):
+            sim.cars.clear()
+            car = sim.spawn("N")
+            counts[(car.turn, car.route.variant)] += 1
+        # Les deux virages au feu restent a 2,5 % chacun.
+        for turn in ("left", "right"):
+            self.assertTrue(90 < sum(count for (movement, _), count in counts.items()
+                                     if movement == turn) < 220, counts)
+        # Le choix Ouest au carrefour du bas represente environ 5 % des tout droit.
+        self.assertTrue(200 < counts[("straight", "lower_west")] < 380, counts)
+        self.assertGreater(counts[("straight", None)], 5000, counts)
+
+    def test_generated_middle_road_cars_sometimes_turn_north(self):
+        sim = Simulation(rate=0)
+        counts = Counter()
+        for _ in range(6000):
+            sim.cars.clear()
+            car = sim.spawn("W")
+            if car.turn == "straight":
+                counts[car.route.variant] += 1
+        self.assertTrue(200 < counts["middle_north"] < 380, counts)
+        self.assertGreater(counts[None], 5000, counts)
+
+    def test_explicit_routes_remain_predictable_and_variants_can_be_requested(self):
+        sim = Simulation(rate=0)
+        default = sim.spawn("N", "straight")
+        self.assertIsNone(default.route.variant)
+        sim.cars.clear()
+        west = sim.spawn("N", "straight", variant="lower_west")
+        self.assertEqual(west.route.nodes[-1], "low_west")
+        sim.cars.clear()
+        north = sim.spawn("W", "straight", variant="middle_north")
+        self.assertEqual(north.route.nodes[-1], "top")

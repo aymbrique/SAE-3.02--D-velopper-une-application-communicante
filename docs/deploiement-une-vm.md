@@ -31,11 +31,12 @@ La simulation et le centre restent **deux programmes séparés**, même sur une 
 ### Circulation et missions
 
 - Quatre points : Ouest (1), Sud-Ouest (2), Nord-Est (3) et Est (4). Les deux véhicules peuvent être envoyés vers n'importe lequel.
-- Le plan du croquis est intégré à `main.py`. Les quatre missions traversent le carrefour à feux à l’aller et au retour ; les raccordements secondaires fonctionnent sans feux, avec un passage réservé à un véhicule à la fois.
+- Le plan du croquis est intégré à `main.py`. Les quatre missions traversent le carrefour à feux à l’aller et au retour ; les raccordements secondaires fonctionnent sans feux. Les mouvements compatibles peuvent se suivre et les secours ont la priorité.
 - Une mission déjà commencée conserve sa destination. Un véhicule occupé ne peut pas être envoyé de nouveau.
-- À chaque choix aléatoire de direction : 95 % tout droit, 2,5 % à gauche et 2,5 % à droite. Un petit échantillon n'aura pas forcément exactement ces proportions.
+- Au feu principal : 95 % tout droit, 2,5 % à gauche et 2,5 % à droite. Après le feu, 5 % des parcours compatibles prennent la bifurcation Ouest de la route du bas ou la bifurcation Nord au milieu du plan. Un petit échantillon n'aura pas forcément exactement ces proportions.
 - Les voitures allant tout droit sur le même axe peuvent traverser ensemble au vert, dans les deux sens et en file. Chaque suivante conserve au moins 44 unités entre centres, sans attendre la sortie complète de son leader. Les virages et les secours restent contrôlés séparément.
-- Une sortie encombrée ou un accès réservé peut obliger à attendre même au vert. Un secours ne maintient pas une priorité avant d'entrer si sa sortie est bloquée.
+- Une sortie encombrée ou un accès réservé peut obliger à attendre même au vert. Le secours garde sa demande de vert pour permettre à la file de se vider ; son entrée reste interdite tant que la sortie est occupée. Au départ et à l'accès final à la caserne, la demande verticale anticipe la vidange du Nord.
+- Les secondes stockées sur les deux lignes s'annulent mutuellement. Un quart du solde restant est rendu au prochain vert normal de sa ligne, puis aux cycles suivants ; une priorité conserve le bonus non servi.
 - Pause, reprise, vitesse, débit, affichage des trajets et remise à zéro restent disponibles.
 
 ### Ce qui est conservé et ce qui ne l'est pas

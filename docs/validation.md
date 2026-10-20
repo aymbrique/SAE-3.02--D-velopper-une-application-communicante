@@ -43,17 +43,19 @@ Le `read` masque la saisie du mot de passe. Le compte de test doit avoir le droi
 | Tests | Verification |
 |---|---|
 | `test_demo.py` - 8 tests historiques | Geometrie et chronologie de l'ancienne demonstration. |
-| `test_simulation.py` - 13 tests | Feux, interruption immediate du vert oppose, transitions, degagement, arbitrage, mise a jour de l'axe d'un meme secours, seuils, ETA, accumulation et restitution, files et arret au rouge. |
+| `test_simulation.py` - 22 tests | Feux, transitions, arbitrage, seuils et ETA, annulation des reserves opposees, remboursement par quarts, interruption sans perte ni double compte, residus, files et arret au rouge. |
 | Essais longs inclus dans la simulation | Dix minutes a 12/min et a 40/min, maximum de 25 voitures, controle des espacements, plusieurs traversees tout droit compatibles sur le meme axe et progression du trafic. |
 | `test_network.py` - 4 tests | Vraies sockets loopback, messages fragmentes/regroupes, validation, erreurs, coupures et redemarrages sans doublons. |
 | `test_destinations.py` - 7 tests | Quatre destinations, 16 paires de missions avec trafic, tirage 95/2,5/2,5, passage simultane sur les deux axes, virages exclusifs et sortie bouchee. |
 | `test_traffic_flow.py` - 10 tests | Deux files de six voitures sur un seul vert, ecarts, suivi continu a la sortie, rouge/orange, degagement complet, mouvements en conflit exclusifs, sortie bouchee et secours suivant une voiture deja sortie. |
 | `test_secondary_flow.py` - 10 tests | File Nord jusqu'au vrai rouge, voies opposees devant la caserne, convois aux virages secondaires, reprise apres secours, retour derriere des voitures au-dela du conflit et maintien de GAP/obstacles reels. |
-| `test_route_rules.py` - 6 tests | Douze trajets voiture et huit missions secours, rejet de Q-R et E-R-Q, maintien des branches autorisees et coherence des mouvements locaux. |
+| `test_route_rules.py` - 11 tests | Douze trajets de base, six variantes et huit missions secours : chaussee, limites visibles, rejet de Q-R et E-R-Q, mouvements locaux et zones de virage. |
 | `test_interface.py` - 4 tests | Boutons, pause, vitesse, debit, choix des trajets, missions et reset jusqu'au centre TCP ; compteurs horizontal/vertical ; apparition hors de la vue apres redimensionnement et zoom. |
 | `test_map.py` - 2 tests | Pixels du dessin : gris clair hors de la chaussee, sept extremites ouvertes jusqu'aux bords et absence de nouvelle sortie Sud. |
 | `test_rescue_priority.py` - 9 tests | Priorite aller/retour aux raccordements sans feux, vert pret avant l'arrivee aux quatre destinations, voiture deja engagee, degagement de la file devant un secours, deux secours sur la meme voie et missions apres accumulation du trafic a 60/min. |
-| `test_spawn.py` - 3 tests | Debut et fin hors des bords visibles des douze trajets, espacement a l'apparition et environ 50 % de tirages venant du Nord. |
+| `test_spawn.py` - 6 tests | Bords visibles, espacement a l'apparition, environ 50 % d'arrivees au Nord, virages rares au feu et choix conditionnels vers Ouest en bas/Nord au milieu. |
+| `test_station_dispatch.py` - 6 tests | File de onze voitures Nord, depart dans l'allee, vert NS anticipe, cedement en amont, reprise et relais NS au retour avant le passage du second secours. |
+| `test_turn_flow.py` - 4 tests | Huit virages au feu degages avant 8 s, file du meme virage partagee avec GAP, vitesse nulle respectee et variantes secondaires achevees. |
 | `test_mariadb.py` - 2 tests | Transactions reelles, historique, numeros anciens, sessions, TCP avec MariaDB et redemarrage du centre. |
 
 ## Verification sur votre VM
@@ -149,6 +151,15 @@ Comparatif d'un scenario determine : 180 secondes simulees, debit 60/min, graine
 
 L'attente au vert est mesuree apres chaque pas : secours occupe et immobile, sans temps d'intervention restant, avec un prochain passage C dont l'axe est vert. Elle peut donc concerner un raccordement avant C ; le dernier pas d'intervention de 0,05 s peut aussi etre inclus lorsque le compte a rebours atteint zero. Les secondes de compensation sont conservees integralement ; le gain provient de la circulation et du parcours corrige.
 
+### Trajets rares, sortie caserne et compensation progressive du 20 octobre 2026
+
+- Base de travail : GitHub `ff745c8f7b7969b1936bf485a49fd038be3866f3`. Les 103 tests hors SQL passent sous Python 3.13, y compris Qt et les vrais echanges TCP locaux. Les deux tests MariaDB ne sont pas rejoues ; les modules TCP et SQL sont conserves.
+- Dix-huit parcours de voiture : douze de base et six variantes, sur les routes existantes. Le tirage au feu conserve 95/2,5/2,5 ; les sorties compatibles ont 5 % de probabilite conditionnelle vers l'Ouest en bas ou le Nord au milieu. Deux series de 6 000 apparitions verifient la presence et la rarete des choix.
+- Reserves nettes verifiees : 17/15 devient 2/0, puis 0,5 s de bonus au prochain vert beneficiaire. Les bonus successifs sont debites uniquement lorsqu'ils sont servis ; les interruptions et les petits residus sont couverts.
+- File preparee de onze voitures Nord a GAP : le depart demande NS avant le seuil habituel, les voitures deja en aval degagent, celles en amont attendent les secours. L'allee libre peut etre parcourue avant que l'insertion F soit libre.
+- Le retour demande NS des la sortie de C jusqu'au degagement de F. Regression d'un premier secours rentrant au garage pendant que le second attend un retour EW : la file Nord se vide et les deux missions finissent, sans entree au rouge.
+- Les huit virages au feu, seuls et engages au debut d'un vert, se terminent avant 7,5 s. Les suivants du meme virage peuvent s'engager avant la sortie du leader, avec GAP controle a chaque pas.
+
 ### Grille a realiser en TP
 
 | Essai | Action | Resultat attendu |
@@ -158,7 +169,7 @@ L'attente au vert est mesuree apres chaque pas : secours occupe et immobile, san
 | Commandes | Pause, reprise, vitesses, reset | Temps et scene coherents ; reset publie disponible pour les deux secours. |
 | Mission 01 | Envoyer seulement 01 | 01 occupe au centre ; 02 reste disponible. |
 | Deux missions | Envoyer 02 pendant la mission 01 | Deux etats distincts ; aucune interruption de priorite en cours. |
-| Compensation | Attendre tous les retours | Compensation seulement apres disponibilite des deux secours. |
+| Compensation | Observer les prochains verts sans demande prioritaire | Reserves opposees annulees et quart du solde ajoute au vert beneficiaire. |
 | Nouvelle intervention | Declencher pendant la compensation | Solde suspendu et repris plus tard. |
 | Liaison | Fermer la simulation | Liaison interrompue, derniers etats conserves. |
 | Reconnexion | Relancer le client ou le centre | Reprise automatique et etats a jour. |
