@@ -11,16 +11,9 @@ def draw_barrier(scene, x, y, width):
     """Une barriere blanche et rouge avec deux pieds."""
     for dx in (6, width - 10):
         rectangle(scene, x + dx, y + 8, 4, 16, "#50565a")
-    rectangle(scene, x, y, width, 10, "#fff5e7")
-    for dx in range(0, int(width) - 12, 16):
-        polygon(scene, [(x + dx, y + 10), (x + dx + 5, y),
-                        (x + dx + 13, y), (x + dx + 8, y + 10)], "#ce4d3d")
-
-
-def draw_cone(scene, x, y):
-    rectangle(scene, x - 7, y + 10, 14, 3, "#514b43")
-    polygon(scene, [(x, y - 5), (x - 5, y + 10), (x + 5, y + 10)], "#ed8b32")
-    rectangle(scene, x - 3, y + 3, 6, 3, "#fff5e7")
+    rectangle(scene, x, y, width, 10, "white")
+    for index in (0, 2, 4):
+        rectangle(scene, x + index * width / 5, y, width / 5, 10, "red")
 
 
 def draw_works_sign(scene, x, y):
@@ -44,19 +37,11 @@ def draw_roadworks(scene):
     x = NODES["R"][0] - ROAD_HALF
     top = NODES["R"][1] + ROAD_HALF
     bottom = NODES["Q"][1] - ROAD_HALF
-    rectangle(scene, x + 4, top + 8, ROAD_HALF - 8, bottom - top - 16, "#c3ad87")
-    for y in range(int(top) + 55, int(bottom) - 25, 52):
-        polygon(scene, [(x + 16, y - 10), (x + 42, y - 14),
-                        (x + 55, y + 4), (x + 38, y + 13),
-                        (x + 12, y + 8)], "#8d7355")
-        draw_cone(scene, x + 8, y)
-        draw_cone(scene, x + ROAD_HALF - 8, y + 18)
     draw_barrier(scene, x + 2, top + 13, ROAD_HALF - 4)
     draw_barrier(scene, x + 2, bottom - 26, ROAD_HALF - 4)
     sign_x = NODES["R"][0] + 45
     draw_works_sign(scene, sign_x, top + 38)
-    rectangle(scene, sign_x - 53, top + 78, 106, 22, "#fff5e7")
-    label(scene, "ROUTE BARRÉE", sign_x - 53, top + 82, 106, 11)
+    label(scene, "TRAVAUX", sign_x - 40, top + 80, 80, 12)
 
 
 def draw_yield_sign(scene, x, y):

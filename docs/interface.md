@@ -39,8 +39,9 @@ Le carrefour a feux se trouve a gauche du plan. Devant la caserne et aux autres 
 
 Le raccordement entre la route horizontale du milieu et celle du bas, a l'Est, est descendant : on peut le prendre depuis la gauche, ou continuer tout droit. Les voitures du bas ne le remontent pas ; celles venant de droite ne tournent pas vers le bas a cet endroit. Les voitures arrivant du bas a droite restent sur la route inferieure jusqu'a leur parcours autorise.
 
-Cette petite voie porte un décor de travaux : sol de chantier, cônes, barrières
-rouges et blanches, panneau triangulaire et indication « Route barrée ».
+Cette petite voie conserve son sol gris et sa flèche blanche descendante.
+Le décor de travaux se limite à deux barrières rouges et blanches et à un
+panneau triangulaire accompagné du texte « Travaux ».
 Trois cédez-le-passage sont dessinés aux raccordements sans feux : arrivées du
 nord vers les routes du milieu et du bas, et arrivée de l'est sur la route
 supérieure. Les panneaux et travaux sont uniquement décoratifs : ils ne

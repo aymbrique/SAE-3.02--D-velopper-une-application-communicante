@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
 from src.interface.batiments import draw_intervention_sites
 from src.interface.signalisation import draw_roadworks, draw_yield_signs
-from src.modeles.plan import (CX, CY, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
+from src.modeles.plan import (CX, CY, LANE, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
                                NODES, ROAD_SEGMENTS, PARKING_Y)
 
 
@@ -99,6 +99,14 @@ class MapView(QGraphicsView):
             self.rectangle(x - ROAD_HALF, y - ROAD_HALF,
                            2 * ROAD_HALF, 2 * ROAD_HALF, "gray")
 
+        # Ce raccordement ne se prend que vers le bas, depuis la gauche de R.
+        x = NODES["R"][0] - LANE
+        y = (NODES["R"][1] + NODES["Q"][1]) / 2
+        arrow = QPen(QColor("white"), 3)
+        for x1, y1, x2, y2 in ((x, y - 24, x, y + 24),
+                               (x - 9, y + 12, x, y + 24),
+                               (x + 9, y + 12, x, y + 24)):
+            self.scene().addLine(x1, y1, x2, y2, arrow)
         draw_roadworks(self.scene())
 
         # Caserne et allee d'acces, a gauche de l'axe vertical principal.
