@@ -251,6 +251,7 @@ class SimulationTests(unittest.TestCase):
         sim = Simulation(rate=0)
         sim.start_mission("01")
         vehicle = sim.rescues[0]
+        vehicle.speed = 40
         vehicle.crossings = ((2000, 2200, "NS"),)
         # La sortie de caserne demande desormais le vert sans attendre le seuil.
         # Tester la regle d'approche une fois cette sortie deja franchie.

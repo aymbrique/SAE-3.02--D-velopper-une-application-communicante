@@ -86,7 +86,7 @@ class TrafficFlowTests(unittest.TestCase):
         self.assertIn(rescue.identifier, sim.crossing_owners)
         self.assert_gaps(sim)
 
-    def test_rescue_still_waits_for_stationary_car_on_exit(self):
+    def test_rescue_advances_toward_stationary_car_without_contact(self):
         sim = Simulation(rate=0)
         leader = sim.spawn("N", "straight")
         leader.distance = leader.crossing[1] + .5
@@ -97,9 +97,11 @@ class TrafficFlowTests(unittest.TestCase):
         stop = rescue.crossing[0]
         rescue.distance = stop
         sim.advance(1)
-        self.assertEqual(rescue.distance, stop)
-        self.assertNotIn(rescue.identifier, sim.crossing_owners)
-        self.assert_gaps(sim)
+        self.assertGreater(rescue.distance, stop)
+        self.assertIn(rescue.identifier, sim.crossing_owners)
+        for _ in range(100):
+            sim.advance(STEP)
+            self.assert_gaps(sim)
 
     def test_close_follower_does_not_pause_when_leader_clears_crossing(self):
         sim = Simulation(rate=0)
@@ -161,7 +163,7 @@ class TrafficFlowTests(unittest.TestCase):
         self.assertNotIn(leader.identifier, sim.crossing_owners)
         self.assertNotIn(follower.identifier, sim.crossing_owners)
 
-    def test_rescue_does_not_share_the_crossing_with_a_convoy(self):
+    def test_rescue_follows_convoy_without_reserving_entire_crossing(self):
         sim = Simulation(rate=0)
         leader, follower = self.queue(sim, "N", 2)
         sim.start_mission("01", "S")
@@ -171,9 +173,12 @@ class TrafficFlowTests(unittest.TestCase):
         follower.distance = follower.crossing[0] + GAP
         sim.crossing_owners.update((leader.identifier, follower.identifier))
         sim.advance(STEP)
-        self.assertEqual(rescue.distance, rescue.crossing[0])
-        self.assertNotIn(rescue.identifier, sim.crossing_owners)
-        self.assertFalse(sim.can_share_crossing(leader, rescue))
+        self.assertGreater(rescue.distance, rescue.crossing[0])
+        self.assertIn(rescue.identifier, sim.crossing_owners)
+        self.assertTrue(sim.can_share_crossing(leader, rescue))
+        for _ in range(150):
+            sim.advance(STEP)
+            self.assert_gaps(sim)
         self.assert_gaps(sim)
 
     def test_rescue_waits_at_occupied_secondary_junction_then_continues(self):

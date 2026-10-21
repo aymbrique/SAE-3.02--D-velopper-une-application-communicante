@@ -2,7 +2,7 @@
 
 # dataclass cree le constructeur de ces simples fiches de donnees.
 from dataclasses import dataclass
-from math import cos, radians, sin
+from math import atan, cos, degrees, radians, sin
 from src.modeles.trajet import Route
 
 
@@ -30,6 +30,10 @@ class Vehicle:
     lateral_offset: float = 0.0
     yielding_to: tuple[str, ...] = ()
     current_speed: float = 0.0
+    manoeuvre_start: float | None = None
+    manoeuvre_from: float = 0.0
+    manoeuvre_target: float = 0.0
+    manoeuvre_length: float = 60.0
 
     @property
     def crossing(self):
@@ -37,12 +41,29 @@ class Vehicle:
             return self.crossings[self.crossing_index]
         return None
 
+    def roadside_offset(self, distance):
+        if self.manoeuvre_start is None:
+            return self.lateral_offset, 0.0
+        progress = min(1.0, max(0.0,
+                       (distance - self.manoeuvre_start) / self.manoeuvre_length))
+        change = self.manoeuvre_target - self.manoeuvre_from
+        # Courbe douce : les roues commencent et finissent paralleles a la voie.
+        offset = self.manoeuvre_from + change * progress ** 2 * (3 - 2 * progress)
+        slope = change * 6 * progress * (1 - progress) / self.manoeuvre_length
+        return offset, degrees(atan(slope))
+
+    def position_at(self, distance, offset=None):
+        x, y, heading = self.route.sample(distance)
+        steering = 0.0
+        if offset is None:
+            offset, steering = self.roadside_offset(distance)
+        angle = radians(heading)
+        return (x - sin(angle) * offset,
+                y + cos(angle) * offset, heading + steering)
+
     @property
     def position(self):
-        x, y, heading = self.route.sample(self.distance)
-        angle = radians(heading)
-        return (x - sin(angle) * self.lateral_offset,
-                y + cos(angle) * self.lateral_offset, heading)
+        return self.position_at(self.distance)
 
 
 @dataclass(frozen=True)

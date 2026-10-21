@@ -146,12 +146,8 @@ class SecondaryFlowTests(unittest.TestCase):
                 stop = rescue.distance
                 sim.advance(2 if moving else STEP)
                 self.assert_gaps(sim)
-                if moving:
-                    self.assertGreater(rescue.distance, stop)
-                    self.assertIn(rescue.identifier, sim.crossing_owners)
-                else:
-                    self.assertEqual(rescue.distance, stop)
-                    self.assertNotIn(rescue.identifier, sim.crossing_owners)
+                self.assertGreater(rescue.distance, stop)
+                self.assertIn(rescue.identifier, sim.crossing_owners)
 
     def test_returning_rescue_ignores_cars_past_conflict_but_waits_for_real_obstacle(self):
         for positions in ((240, 285), (195,)):

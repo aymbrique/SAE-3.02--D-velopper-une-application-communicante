@@ -8,7 +8,8 @@ from PyQt6.QtGui import QPainterPath, QPolygonF
 
 def assert_spacing(test, simulation):
     for first, second in combinations(simulation.vehicles, 2):
-        if first.lateral_offset == second.lateral_offset == 0:
+        if (first.kind == second.kind == "car"
+                and first.lateral_offset == second.lateral_offset == 0):
             test.assertGreaterEqual(hypot(first.position[0] - second.position[0],
                                          first.position[1] - second.position[1]), 44 - 1e-6,
                                     (simulation.time, first.identifier, second.identifier))

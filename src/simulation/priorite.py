@@ -3,9 +3,8 @@
 from math import cos, hypot, radians, sin
 
 PULL_OVER = 26.0
-SIDE_SPEED = 30.0
 LOOK_AHEAD = 220.0
-PASS_MARGIN = 65.0
+PASS_MARGIN = 40.0
 
 
 def corners(vehicle, position, padding=0.0):
@@ -44,8 +43,13 @@ def beside_rescue(car, rescue):
     distance = start
     while distance <= end:
         rx, ry, heading = rescue.route.sample(distance)
+        dx, dy = cos(radians(heading)), sin(radians(heading))
+        along = (x - rx) * dx + (y - ry) * dy
+        lateral = abs((x - rx) * dy - (y - ry) * dx)
+        projected = distance + along
         if (abs(cos(radians(angle - heading))) > .96
-                and hypot(x - rx, y - ry) < 76):
+                and lateral < 76 and start <= projected <= end
+                and (projected >= rescue.distance or rescue.identifier in car.yielding_to)):
             return True
         distance += 10
     return False

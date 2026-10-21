@@ -75,7 +75,7 @@ class TrafficChangesTests(unittest.TestCase):
             sim.start_mission("02", "invalid")
         self.assertFalse(sim.rescues[1].busy)
 
-    def test_blocked_exit_keeps_green_request_but_prevents_entry(self):
+    def test_obstacle_on_exit_keeps_request_but_allows_safe_approach(self):
         sim = Simulation(rate=0)
         sim.start_mission("01", "W")
         rescue = sim.rescues[0]
@@ -90,8 +90,11 @@ class TrafficChangesTests(unittest.TestCase):
         self.assertEqual(len(sim.requests()), 1)
         sim.advance(2.1)
         self.assertEqual(sim.lights.signal(rescue.crossing[2]), "green")
-        self.assertEqual(rescue.distance, rescue.crossing[0])
-        self.assertNotIn(rescue.identifier, sim.crossing_owners)
+        self.assertGreater(rescue.distance, rescue.crossing[0])
+        self.assertIn(rescue.identifier, sim.crossing_owners)
+        for _ in range(40):
+            sim.advance(.05)
+            assert_spacing(self, sim)
         sim.cars.clear()
         sim.advance(.5)
         self.assertIn(rescue.identifier, sim.crossing_owners)

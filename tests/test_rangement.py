@@ -50,9 +50,9 @@ class RangementTests(unittest.TestCase):
                     sim.advance(STEP)
                     self.assert_bodies_do_not_touch(sim)
                     max_offset = max(max_offset, car.lateral_offset)
-                    if car.yielding_to and car.lateral_offset >= PULL_OVER - .01:
+                    if car.yielding_to and car.lateral_offset == PULL_OVER:
                         stopped_beside = True
-                        self.assertEqual(car.distance, initial)
+                        self.assertAlmostEqual(car.distance, initial + car.manoeuvre_length)
                         self.assertTrue(car.waiting)
                         self.assertEqual(car.current_speed, 0)
                     if car.distance > initial and car.lateral_offset == 0:
@@ -75,8 +75,9 @@ class RangementTests(unittest.TestCase):
         original = car.position
         sim.advance(1)
         frame_car = next(v for v in sim.frame().cars if v.identifier == car.identifier)
-        self.assertLess(frame_car.x, original[0] - 20)
-        self.assertAlmostEqual(frame_car.y, original[1])
+        self.assertLess(frame_car.x, original[0])
+        self.assertGreater(frame_car.y, original[1])
+        self.assertNotEqual(frame_car.heading, original[2])
         self.assertIn("cote", frame_car.stage)
         self.assert_bodies_do_not_touch(sim)
 

@@ -7,15 +7,20 @@ from src.modeles.plan import (DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y
                                SCENE_WIDTH, SCENE_HEIGHT, car_exit, car_route, rescue_route, on_road)
 from src.modeles.vehicules import Frame, Vehicle, VehicleState
 from src.simulation.feux import Lights, Request
-from src.simulation.priorite import (PULL_OVER, SIDE_SPEED, beside_rescue,
+from src.simulation.priorite import (PULL_OVER, beside_rescue,
                                      bodies_clear, corners)
 
 STEP = 0.05  # Duree d'un calcul de deplacement, en secondes simulees.
 GAP = 44.0  # Distance minimale entre les centres des vehicules.
 MAX_CARS = 25
 DWELL = 8.0  # Temps passe sur le lieu de l'intervention.
-JUNCTION_LOOKAHEAD = 120.0  # Anticiper la priorite 3 s avant un raccordement.
+RESCUE_SPEED = 56.0  # Plus rapide que les voitures, y compris dans les virages.
+JUNCTION_LOOKAHEAD = 3 * RESCUE_SPEED  # Anticiper la priorite 3 s avant un raccordement.
 TURN_SPEED_FACTOR = 40 / 28  # Degager les virages plus vite que l'allure de croisiere.
+
+
+def car_parked(vehicle):
+    return vehicle.manoeuvre_start is None and vehicle.lateral_offset >= PULL_OVER - 1e-6
 
 
 class Simulation:
@@ -31,14 +36,15 @@ class Simulation:
         self.lights = Lights()
         self.crossing_owners = set()
         self.junction_conflicts = {}
+        self.clearing_accesses = set()
         self.cars = []
         self.rescues = []
         self.events = []
         for identifier, kind, y, color in (("01", "fire", PARKING_Y["01"], "#db6758"),
                                             ("02", "ambulance", PARKING_Y["02"], "#f8faf9")):
             route, crossings, hospital = rescue_route(identifier, y)
-            self.rescues.append(Vehicle(identifier, kind, route, crossings, color, 40,
-                                        hospital=hospital, total_estimate=route.length / 40 + DWELL))
+            self.rescues.append(Vehicle(identifier, kind, route, crossings, color, RESCUE_SPEED,
+                                        hospital=hospital, total_estimate=route.length / RESCUE_SPEED + DWELL))
 
     @property
     def vehicles(self):
@@ -67,6 +73,8 @@ class Simulation:
         vehicle.distance = 0.0
         vehicle.crossing_index = 0
         vehicle.requested_at = None
+        vehicle.lateral_offset = 0.0
+        vehicle.manoeuvre_start = None
         vehicle.visited = False
         vehicle.dwell_remaining = 0.0
         self.events.append((identifier, "occupe"))
@@ -180,7 +188,9 @@ class Simulation:
 
     def _step(self):
         self.time += STEP
+        self._update_clearing_accesses()
         self._update_yielding()
+        self._update_rescue_lanes()
         rescue_busy = False
         for rescue in self.rescues:
             if rescue.busy:
@@ -198,7 +208,7 @@ class Simulation:
             self._move(vehicle)
         remaining_cars = []
         for car in self.cars:
-            if car.distance >= car.route.length:
+            if car.distance >= car.route.length - 1e-6:
                 self.completed += 1
             else:
                 remaining_cars.append(car)
@@ -212,10 +222,7 @@ class Simulation:
         return (not clearing, -vehicle.distance, vehicle.identifier)
 
     def _position(self, vehicle, distance, offset=None):
-        x, y, heading = vehicle.route.sample(distance)
-        offset = vehicle.lateral_offset if offset is None else offset
-        return (x - sin(radians(heading)) * offset,
-                y + cos(radians(heading)) * offset, heading)
+        return vehicle.position_at(distance, offset)
 
     def pair_clear(self, first, second, position=None, other_position=None):
         position = first.position if position is None else position
@@ -223,11 +230,17 @@ class Simulation:
         distance = hypot(position[0] - other_position[0], position[1] - other_position[1])
         if distance >= GAP - 1e-7:
             return True
-        if first.identifier in self.crossing_owners and second.identifier in self.crossing_owners:
-            return False
         if abs(first.lateral_offset) > 1e-6 or abs(second.lateral_offset) > 1e-6:
             return bodies_clear(first, position, second, other_position)
-        return False
+        # Apres une reinsertion, un ecart deja court ne doit pas emprisonner
+        # le vehicule de tete : il peut s'eloigner en gardant les gabarits libres.
+        previous = hypot(first.position[0] - second.position[0],
+                         first.position[1] - second.position[1])
+        escaping = distance > previous + 1e-7
+        unchanged_rescue = ((first.kind != "car" or second.kind != "car")
+                            and distance >= previous - 1e-7)
+        return ((escaping or unchanged_rescue)
+                and bodies_clear(first, position, second, other_position))
 
     def _clear_position(self, vehicle, position, ignored=()):
         for other in self.vehicles:
@@ -238,51 +251,167 @@ class Simulation:
         return True
 
     def _clear_path(self, vehicle, target, ignored=()):
-        return self._clear_position(vehicle, self._position(vehicle, target), ignored)
+        position = self._position(vehicle, target)
+        if vehicle.manoeuvre_start is not None:
+            if not all(on_road(x, y) for x, y in corners(vehicle, position)):
+                return False
+        return self._clear_position(vehicle, position, ignored)
 
     def _can_pull_over(self, car):
         if car.identifier in self.crossing_owners or car.speed <= 0:
             return False
-        _, _, before = car.route.sample(car.distance - 20)
-        _, _, after = car.route.sample(car.distance + 20)
-        if cos(radians(before - after)) < .995:
+        end = car.distance + car.manoeuvre_length
+        if car.crossing and car.distance <= car.crossing[0] < end - 1e-6:
             return False
-        # Finir de traverser un acces avant de s'immobiliser sur son bord.
-        return not any(stop + 20 < car.distance < end - 20
-                       for stop, end, _ in car.route.junctions)
+        _, _, before = car.route.sample(car.distance)
+        for distance in (car.distance + 20, car.distance + 40, end):
+            _, _, after = car.route.sample(distance)
+            if cos(radians(before - after)) < .995:
+                return False
+        # Ne jamais se garer au milieu d'un raccordement.
+        return not any(stop + 20 < end and car.distance < finish - 20
+                       for stop, finish, _ in car.route.junctions)
 
     def _update_yielding(self):
         for car in self.cars:
             nearby = tuple(rescue.identifier for rescue in self.rescues
                            if beside_rescue(car, rescue))
             can_park = (car.identifier not in self.crossing_owners
-                        and (self._can_pull_over(car) or car.lateral_offset > 0))
-            if nearby and can_park:
-                # Choisir une place entiere : ne pas rester coince a mi-decalage
-                # a cote d'une voiture qui s'est deja rangee.
-                parked = self._position(car, car.distance, PULL_OVER)
-                previous = car.lateral_offset
-                car.lateral_offset = PULL_OVER
-                can_park = (all(on_road(x, y) for x, y in corners(car, parked))
-                            and self._clear_position(car, parked))
-                car.lateral_offset = previous
+                        and (self._can_pull_over(car) or car.lateral_offset > 0
+                             or (car.manoeuvre_start is not None
+                                 and car.manoeuvre_target == PULL_OVER)))
             car.yielding_to = nearby if can_park else ()
             target = PULL_OVER if car.yielding_to else 0.0
-            old = car.lateral_offset
-            change = min(SIDE_SPEED * STEP, abs(target - old))
-            offset = old + (change if target > old else -change)
-            if abs(offset - old) < 1e-9:
+            if (car.manoeuvre_start is not None
+                    or abs(car.lateral_offset - target) < 1e-9):
                 continue
-            position = self._position(car, car.distance, offset)
-            if not all(on_road(x, y) for x, y in corners(car, position)):
+            if target == 0 and not self._merge_has_room(car):
                 continue
-            car.lateral_offset = offset
-            if not self._clear_position(car, position):
-                car.lateral_offset = old
+            car.manoeuvre_start = car.distance
+            car.manoeuvre_from = car.lateral_offset
+            car.manoeuvre_target = target
+            if not all(on_road(x, y)
+                       for distance in range(0, int(car.manoeuvre_length) + 1, 3)
+                       for x, y in corners(car, car.position_at(car.distance + distance))):
+                car.manoeuvre_start = None
+                if target:
+                    car.yielding_to = ()
+
+    def _merge_has_room(self, car):
+        x, y, heading = car.route.sample(car.distance)
+        dx, dy = cos(radians(heading)), sin(radians(heading))
+        for rescue in self.rescues:
+            if not rescue.busy:
+                continue
+            rx, ry, other_heading = rescue.route.sample(rescue.distance)
+            ahead = (x - rx) * dx + (y - ry) * dy
+            lateral = abs((x - rx) * dy - (y - ry) * dx)
+            if (cos(radians(heading - other_heading)) > .96
+                    and -45 < ahead < 80 and lateral < 40):
+                return False
+        return True
+
+    def _update_rescue_lanes(self):
+        """Seul le secours peut emprunter le milieu de la route pour depasser."""
+        active = [rescue for rescue in self.rescues if rescue.busy]
+        passing = min(active, key=lambda rescue: (rescue.started_at, rescue.identifier),
+                      default=None)
+        for rescue in active:
+            x, y, heading = rescue.route.sample(rescue.distance)
+            dx, dy = cos(radians(heading)), sin(radians(heading))
+            target = 0.0
+            if rescue is passing and not rescue.dwell_remaining:
+                for car in self.cars:
+                    ox, oy, other_heading = car.position
+                    ahead = (ox - x) * dx + (oy - y) * dy
+                    lateral = abs((ox - x) * dy - (oy - y) * dx)
+                    if (cos(radians(heading - other_heading)) > .8
+                            and -45 < ahead < 180 and lateral < 24):
+                        target = -PULL_OVER
+                        break
+            # Garder aussi la place de reintegrer sa voie avant le prochain virage.
+            if target and any(stop - 3 * rescue.manoeuvre_length <= rescue.distance < end
+                              for stop, end, _ in (*rescue.route.junctions, *rescue.crossings)):
+                target = 0.0
+            if target and any(cos(radians(heading - rescue.route.sample(
+                    rescue.distance + offset)[2])) < .995 for offset in (30, 60, 90, 120)):
+                target = 0.0
+            if rescue.manoeuvre_start is not None:
+                continue
+            if rescue.manoeuvre_start is None and abs(rescue.lateral_offset - target) < 1e-9:
+                continue
+            previous = (rescue.manoeuvre_start, rescue.manoeuvre_from, rescue.manoeuvre_target)
+            rescue.manoeuvre_start = rescue.distance
+            rescue.manoeuvre_from = rescue.lateral_offset
+            rescue.manoeuvre_target = target
+            if target and not all(on_road(px, py)
+                                  for offset in (15, 30, 45, 60)
+                                  for px, py in corners(rescue, rescue.position_at(rescue.distance + offset))):
+                rescue.manoeuvre_start, rescue.manoeuvre_from, rescue.manoeuvre_target = previous
+
+    def _update_clearing_accesses(self):
+        keys = {key for rescue in self.rescues if rescue.busy
+                for stop, end, key in rescue.route.junctions
+                if (rescue.distance < end and (stop - rescue.distance <= JUNCTION_LOOKAHEAD
+                    or key == "F" and self._leaving_station(rescue)))}
+        self.clearing_accesses = {
+            vehicle.identifier for vehicle in self.vehicles
+            if (vehicle.kind == "car" or vehicle.busy)
+            and any(key in keys and (stop < vehicle.distance < end
+                    or vehicle.kind != "car" and stop == vehicle.distance)
+                    for stop, end, key in vehicle.route.junctions)}
+
+    def _clears_access_queue(self, vehicle):
+        """Degager une file encore engagee dans un carrefour ou un acces de secours."""
+        x, y, heading = vehicle.route.sample(vehicle.distance)
+        dx, dy = cos(radians(heading)), sin(radians(heading))
+        for other in self.vehicles:
+            if other.kind != "car" and other.identifier not in self.clearing_accesses:
+                continue
+            manoeuvring = (other.kind == "car" and other.manoeuvre_start is not None
+                            and other.manoeuvre_target == PULL_OVER)
+            if (other is vehicle or not manoeuvring and other.identifier not in (
+                    self.crossing_owners | self.clearing_accesses)):
+                continue
+            reference = other.distance
+            if other.kind != "car":
+                # Un secours qui s'insere regarde la voie a la sortie de sa courbe.
+                reference = next((end for stop, end, _ in other.route.junctions
+                                  if stop <= other.distance < end), reference)
+            ox, oy, other_heading = other.route.sample(reference)
+            ahead = (x - ox) * dx + (y - oy) * dy
+            lateral = abs((x - ox) * dy - (y - oy) * dx)
+            minimum = -GAP if reference != other.distance else 0.0
+            if (cos(radians(heading - other_heading)) > .96
+                    and minimum < ahead < MAX_CARS * GAP and lateral < 18):
+                return True
+        return False
+
+    def _follow_queue(self, vehicle, target):
+        """Conserver l'ordre de la file, meme si son leader est range au bord."""
+        x, y, heading = vehicle.route.sample(vehicle.distance)
+        dx, dy = cos(radians(heading)), sin(radians(heading))
+        for other in self.cars:
+            if other is vehicle:
+                continue
+            if vehicle.kind != "car" and not (other.manoeuvre_start is not None
+                                               and other.manoeuvre_target == 0):
+                continue
+            # La voie habituelle reste reservee au leader pendant sa manoeuvre.
+            ox, oy, other_heading = other.route.sample(other.distance)
+            if cos(radians(heading - other_heading)) < .96:
+                continue
+            ahead = (ox - x) * dx + (oy - y) * dy
+            lateral = abs((ox - x) * dy - (oy - y) * dx)
+            if 0 < ahead < GAP + 150 and lateral < 18:
+                target = min(target, vehicle.distance + max(0.0, ahead - GAP))
+        return target
 
     def can_share_crossing(self, first, second):
         """Suivi tout droit et mouvements opposes sans croisement de trajectoire."""
-        if first.kind != "car" or second.kind != "car" or first.origin not in OPPOSITE:
+        if (first.kind == "car") != (second.kind == "car"):
+            return True  # Le secours se guide sur les carrosseries, sans reserver tout le carrefour.
+        if first.kind != "car" or first.origin not in OPPOSITE:
             return False
         if second.origin == first.origin:
             return True
@@ -346,8 +475,10 @@ class Simulation:
                 return False
         if vehicle.kind != "car" and self.lights.owner and self.lights.owner.identifier != vehicle.identifier:
             return False
-        if vehicle.kind != "car" and not self._exit_clear(vehicle):
-            return False
+        if vehicle.kind != "car":
+            # Un obstacle lointain ou dans une autre branche ne ferme pas l'entree.
+            # Chaque pas reste soumis au controle de collision des carrosseries.
+            return self._clear_path(vehicle, vehicle.distance + min(.05, vehicle.speed * STEP))
         # Une voiture deja engagee et en mouvement ne bouche pas tout le trajet
         # des suivantes tout droit. Cela vaut aussi lorsqu'elle vient de sortir.
         # Les vehicules arretes, les virages et les secours restent des obstacles.
@@ -369,7 +500,8 @@ class Simulation:
         vehicle.current_speed = 0.0
         if vehicle.kind != "car" and not vehicle.busy:
             return
-        if vehicle.kind == "car" and vehicle.yielding_to:
+        if (vehicle.kind == "car" and vehicle.yielding_to
+                and car_parked(vehicle) and not self._clears_access_queue(vehicle)):
             vehicle.waiting = True
             return
         if vehicle.dwell_remaining > 0:
@@ -400,6 +532,10 @@ class Simulation:
                 if 0 < ahead < 150 and lateral < 70:
                     speed = min(speed, 18.0)
         target = min(old + speed * STEP, vehicle.route.length)
+        target = self._follow_queue(vehicle, target)
+        if (vehicle.kind == "car" and vehicle.yielding_to
+                and vehicle.manoeuvre_start is not None):
+            target = min(target, vehicle.manoeuvre_start + vehicle.manoeuvre_length)
         target = self._limit_at_junctions(vehicle, old, target)
         crossing = vehicle.crossing
         entering = crossing is not None and old <= crossing[0] and target > crossing[0]
@@ -420,20 +556,37 @@ class Simulation:
             target = low
         if target > old + 1e-7 and self._clear_path(vehicle, target):
             vehicle.distance = target
+            if vehicle.manoeuvre_start is not None:
+                vehicle.lateral_offset, _ = vehicle.roadside_offset(target)
+                if target >= vehicle.manoeuvre_start + vehicle.manoeuvre_length - 1e-7:
+                    vehicle.lateral_offset = vehicle.manoeuvre_target
+                    vehicle.manoeuvre_start = None
             vehicle.current_speed = (target - old) / STEP
             if entering and target > crossing[0]:
                 self.crossing_owners.add(vehicle.identifier)
+        if (vehicle.manoeuvre_start is not None and vehicle.distance >=
+                vehicle.manoeuvre_start + vehicle.manoeuvre_length - 1e-6):
+            vehicle.distance = vehicle.manoeuvre_start + vehicle.manoeuvre_length
+            vehicle.lateral_offset = vehicle.manoeuvre_target
+            vehicle.manoeuvre_start = None
         vehicle.waiting = vehicle.distance <= old + 1e-9
+        if (vehicle.kind == "car" and vehicle.yielding_to and car_parked(vehicle)
+                and not self._clears_access_queue(vehicle)):
+            vehicle.waiting = True
+            vehicle.current_speed = 0.0
         if crossing and vehicle.distance >= crossing[1]:
             self.crossing_owners.discard(vehicle.identifier)
             vehicle.crossing_index += 1
             vehicle.requested_at = None
-        if vehicle.hospital is not None and not vehicle.visited and vehicle.distance >= vehicle.hospital:
+        if vehicle.hospital is not None and not vehicle.visited and vehicle.distance >= vehicle.hospital - 1e-6:
+            vehicle.distance = vehicle.hospital
             vehicle.visited = True
             vehicle.dwell_remaining = DWELL
-        if vehicle.kind != "car" and vehicle.distance >= vehicle.route.length:
+        if vehicle.kind != "car" and vehicle.distance >= vehicle.route.length - 1e-6:
             vehicle.busy = False
             vehicle.distance = 0.0
+            vehicle.lateral_offset = 0.0
+            vehicle.manoeuvre_start = None
             vehicle.waiting = False
             self.completed += 1
             self.events.append((vehicle.identifier, "disponible"))
@@ -479,7 +632,7 @@ class Simulation:
         # Le garage ne reserve que son allee : l'insertion est controlee a F.
         # Sinon une file deja en train de degager F immobilise encore le secours
         # sur sa place, alors que son trajet jusqu'a la ligne d'insertion est libre.
-        sweep_end, margin = end, 46
+        sweep_end, margin = end, (1 if vehicle.kind != "car" else 46)
         if key == "parking" and stop == 0:
             sweep_end = next(start for start, _, name in vehicle.route.junctions if name == "F")
             margin = 1

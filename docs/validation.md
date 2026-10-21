@@ -10,15 +10,20 @@ python -m unittest discover -s tests -v
 
 - Déplacements par pas fixes, rouge/orange, files, espacement et reprise du trafic.
 - Passage des voitures compatibles au vert, y compris derrière un virage.
-- Décalage réel sur le bord, arrêt pendant la priorité et réinsertion après le secours.
+- Rangement en avançant, orientation pendant la manœuvre, arrêt et réinsertion.
+- Conservation de l'ordre dans la file pendant le rangement et la reprise.
+- Secours plus rapides et passage au vert sans réservation inutile de tout le carrefour.
 - Absence de contact entre les rectangles orientés, vérifiée avec les polygones Qt.
 - Départ dans une file de onze voitures au nord et retour à la caserne.
 - Deux secours simultanés et les seize couples de destinations à 40 voitures/minute.
-- Dix minutes de circulation, avec les graines et débits définis dans les tests.
+- Dix minutes à 60 voitures/minute, six interventions successives, graines 51 et 302.
+- Retour des missions, progression du trafic et durée limitée du tout rouge dans ces scénarios.
+- Arrivée à un point d'intervention ou en fin de trajet à une erreur flottante près.
 - Annulation des réserves opposées et restitution par quarts aux prochains verts.
 - Boutons, minuteur, affichage des trajets et échanges TCP réels sur l'ordinateur.
 
-Les nouvelles régressions se trouvent dans `tests/test_rangement.py`.
+Les régressions se trouvent dans `tests/test_rangement.py` et
+`tests/test_priorite_fluide.py`.
 Les contrôles géométriques communs sont dans `tests/traffic_checks.py`.
 
 ## MariaDB
@@ -37,7 +42,7 @@ les tables ni le protocole TCP. Les essais SQL ne sont pas rejoués pour cette m
 1. Ouvrir `PycharmProjects/SAE302-GitHub`, puis `main.py`.
 2. Lancer `python main.py --local` et cliquer sur Démarrer.
 3. Augmenter le trafic, puis envoyer un secours : les voitures proches se rangent.
-4. Vérifier leur arrêt, le passage du secours et leur reprise.
+4. Vérifier qu'elles avancent en biais pour se ranger, s'arrêtent, puis reprennent sans se doubler.
 5. Envoyer le second secours et essayer les quatre destinations.
 6. Observer une voiture qui tourne : une suivante de la même approche peut entrer en ralentissant.
 7. Vérifier pause, reprise, vitesse et Recommencer.

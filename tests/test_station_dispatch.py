@@ -46,6 +46,7 @@ class StationDispatchTests(unittest.TestCase):
                 sim, _, _, downstream, _ = self.queued_north()
                 sim.start_mission(identifier, "W")
                 rescue = sim.get_rescue(identifier)
+                rescue.speed = 40  # Verifier le declenchement meme hors seuil usuel.
                 metres, eta = sim.approach(rescue)
                 self.assertGreater(metres, 150)
                 self.assertGreater(eta, 10)
