@@ -25,6 +25,10 @@ python -m unittest discover -s tests -v
 - Deux secours face à face sur les deux axes : mission la plus ancienne,
   maintien du choix jusqu'à la sortie, puis passage du second sans attendre
   le retour complet du premier à la caserne.
+- Aucune réservation du retour avant les soins, pendant le stationnement
+  ou dans l'allée du parking ; reprise de la demande sur la route au seuil.
+- Passage du second secours pendant que le premier intervient à la mairie,
+  sur les deux axes, avec chacun des deux véhicules comme premier intervenant.
 - Dix minutes à 60 voitures/minute, six interventions successives, graines 51 et 302.
 - Retour des missions, progression du trafic et durée limitée du tout rouge dans ces scénarios.
 - Arrivée à un point d'intervention ou en fin de trajet à une erreur flottante près.
@@ -34,6 +38,7 @@ python -m unittest discover -s tests -v
 Les régressions se trouvent dans `tests/test_rangement.py` et
 `tests/test_priorite_fluide.py`.
 L'arbitrage face à face est vérifié dans `tests/test_arbitrage_secours.py`.
+La libération des feux pendant les soins est vérifiée dans `tests/test_priorite_parking.py`.
 Les contrôles géométriques communs sont dans `tests/traffic_checks.py`.
 
 ## MariaDB

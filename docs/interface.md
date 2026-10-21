@@ -50,6 +50,13 @@ dans `src/interface/signalisation.py` et utilise seulement les formes de PyQt6.
 
 Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Des que le secours est a 150 m ou moins ou a 10 s d'arrivee ou moins, son feu est demande au vert, a l'aller comme au retour. Si l'autre axe est vert, il passe immediatement a l'orange, puis au tout rouge avant le vert du secours ; les vehicules deja engages finissent de degager. Une sortie occupee impose l'attente avant d'entrer, mais ne supprime plus la demande du vert.
 
+Après le passage aller, le secours ne réserve pas les feux pour son retour
+tant qu'il rejoint le lieu d'intervention, y reste garé ou ressort de son
+parking. Il redemande le vert une fois revenu sur la chaussée et dans le
+seuil d'approche du carrefour (150 m ou 10 s). Pendant les soins, les feux
+restent disponibles pour le trafic et pour l'autre secours. L'ancienneté
+de sa mission est conservée pour l'arbitrage à son retour.
+
 Une demande seule prépare le vert. Dès que les deux secours atteignent le
 seuil au même carrefour, celui dont l'intervention a commencé le plus tôt
 (donc le temps écoulé le plus grand) obtient la commande des feux. En cas

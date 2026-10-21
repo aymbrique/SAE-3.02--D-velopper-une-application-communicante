@@ -140,6 +140,12 @@ class Simulation:
     def requests(self):
         result = []
         for vehicle in self.rescues:
+            # Le second passage est le retour : ne pas le reserver en allant
+            # au patient, pendant les soins ou encore dans l'allee du parking.
+            if vehicle.crossing_index == 1 and (
+                    not vehicle.visited or vehicle.dwell_remaining > 0
+                    or not on_road(*vehicle.position[:2])):
+                continue
             distance, eta = self.approach(vehicle)
             returning_to_station = self._returning_station(vehicle)
             at_threshold = distance is not None and (distance <= 150 or eta <= 10)
