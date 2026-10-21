@@ -38,7 +38,8 @@ class PrioriteFluideTests(unittest.TestCase):
         rescue = sim.get_rescue("02")
         rescue.distance = rescue.crossing[0] - 120
         car = sim.spawn("N", "straight")
-        car.distance = car.crossing[0] - 60
+        car.distance = car.crossing[0] - car.manoeuvre_length
+        rescue.distance = rescue.crossing[0] - car.manoeuvre_length - 120
         turned = False
         parked = False
         for _ in range(300):

@@ -2,7 +2,7 @@
 
 from math import cos, hypot, radians, sin
 
-PULL_OVER = 26.0
+PULL_OVER = 22.0
 LOOK_AHEAD = 220.0
 PASS_MARGIN = 40.0
 

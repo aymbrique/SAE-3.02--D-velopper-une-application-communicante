@@ -28,8 +28,8 @@ encore proche. Les mouvements opposés qui se coupent restent successifs.
 
 Les secours roulent à 56 unités/s, plus vite que les voitures même dans les
 virages. `priorite.py` repère les voitures devant un secours proche. Sur une
-portion droite, hors des accès à dégager, elles se rangent de 26 unités en
-avançant sur 60 unités. La courbe commence et finit parallèlement à la voie ;
+portion droite, hors des accès à dégager, elles se rangent de 22 unités en
+avançant sur 72 unités. Le braquage reste inférieur à 25 degrés. La courbe commence et finit parallèlement à la voie ;
 l'orientation dessinée suit le déplacement. Une voiture bloquée ne glisse pas
 sur le côté. Une fois rangée, elle attend le passage du secours, puis rejoint
 sa voie avec la même manœuvre.

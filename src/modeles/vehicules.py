@@ -33,7 +33,7 @@ class Vehicle:
     manoeuvre_start: float | None = None
     manoeuvre_from: float = 0.0
     manoeuvre_target: float = 0.0
-    manoeuvre_length: float = 60.0
+    manoeuvre_length: float = 72.0
 
     @property
     def crossing(self):

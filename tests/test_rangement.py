@@ -10,9 +10,58 @@ from PyQt6.QtGui import QPainterPath, QPolygonF
 
 from src.simulation.moteur import GAP, STEP, Simulation
 from src.simulation.priorite import PULL_OVER, corners
+from src.modeles.plan import on_road
 
 
 class RangementTests(unittest.TestCase):
+    def test_pull_over_and_merge_keep_a_moderate_angle_inside_road(self):
+        sim = Simulation(rate=0)
+        car = sim.spawn("N", "straight")
+        start = 350
+        for first, last in ((0, PULL_OVER), (PULL_OVER, 0)):
+            with self.subTest(offsets=(first, last)):
+                car.manoeuvre_start = start
+                car.manoeuvre_from = first
+                car.manoeuvre_target = last
+                previous_y = -float("inf")
+                for step in range(101):
+                    distance = start + car.manoeuvre_length * step / 100
+                    x, y, heading = car.position_at(distance)
+                    offset, _ = car.roadside_offset(distance)
+                    self.assertLessEqual(abs(offset), 22)
+                    self.assertLess(abs(heading - 90), 25)
+                    self.assertGreater(y, previous_y)
+                    self.assertTrue(all(on_road(px, py) for px, py in corners(car, (x, y, heading))))
+                    previous_y = y
+
+    def test_pull_over_near_lower_turn_keeps_clear_of_rescue(self):
+        sim = Simulation(rate=0)
+        sim.start_mission("01", "S")
+        rescue = sim.get_rescue("01")
+        rescue_stop = next(stop for stop, _, key in rescue.route.junctions if key == "D")
+        rescue.distance = rescue_stop - 240
+        sim.crossing_owners.add(rescue.identifier)
+        cars = []
+        for index in range(2):
+            car = sim.spawn("N", "straight")
+            stop = next(stop for stop, _, key in car.route.junctions if key == "D")
+            car.distance = stop - 84 - 60 * index
+            car.crossing_index = 1
+            cars.append(car)
+        max_offset = 0
+        for _ in range(1800):
+            sim.advance(STEP)
+            self.assert_bodies_do_not_touch(sim)
+            for car in cars:
+                max_offset = max(max_offset, car.lateral_offset)
+                self.assertLessEqual(car.lateral_offset, 22)
+                self.assertTrue(all(on_road(x, y) for x, y in corners(car, car.position)))
+            if not rescue.busy and all(car.distance >= car.route.length for car in cars):
+                break
+        self.assertEqual(max_offset, PULL_OVER)
+        self.assertFalse(rescue.busy)
+        self.assertTrue(all(car.distance >= car.route.length for car in cars))
+
     def assert_bodies_do_not_touch(self, simulation):
         for first, second in combinations(simulation.vehicles, 2):
             polygons = []
@@ -35,7 +84,8 @@ class RangementTests(unittest.TestCase):
         sim.lights.axis = rescue.crossing[2]
         rescue.distance = rescue.crossing[0] - 120
         car = sim.spawn(origin, "straight")
-        car.distance = car.crossing[0] - 60
+        car.distance = car.crossing[0] - car.manoeuvre_length
+        rescue.distance = rescue.crossing[0] - car.manoeuvre_length - 120
         return sim, rescue, car
 
     def test_car_pulls_over_stops_and_returns_after_rescue(self):

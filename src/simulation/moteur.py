@@ -44,7 +44,8 @@ class Simulation:
                                             ("02", "ambulance", PARKING_Y["02"], "#f8faf9")):
             route, crossings, hospital = rescue_route(identifier, y)
             self.rescues.append(Vehicle(identifier, kind, route, crossings, color, RESCUE_SPEED,
-                                        hospital=hospital, total_estimate=route.length / RESCUE_SPEED + DWELL))
+                                        hospital=hospital, total_estimate=route.length / RESCUE_SPEED + DWELL,
+                                        manoeuvre_length=60.0))
 
     @property
     def vehicles(self):
@@ -326,11 +327,11 @@ class Simulation:
                     ahead = (ox - x) * dx + (oy - y) * dy
                     lateral = abs((ox - x) * dy - (oy - y) * dx)
                     if (cos(radians(heading - other_heading)) > .8
-                            and -45 < ahead < 180 and lateral < 24):
+                            and -45 < ahead < 180 and lateral < PULL_OVER - .5):
                         target = -PULL_OVER
                         break
             # Garder aussi la place de reintegrer sa voie avant le prochain virage.
-            if target and any(stop - 3 * rescue.manoeuvre_length <= rescue.distance < end
+            if target and any(stop - 4 * rescue.manoeuvre_length <= rescue.distance < end
                               for stop, end, _ in (*rescue.route.junctions, *rescue.crossings)):
                 target = 0.0
             if target and any(cos(radians(heading - rescue.route.sample(
