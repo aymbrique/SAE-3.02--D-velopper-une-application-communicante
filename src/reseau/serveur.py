@@ -5,7 +5,7 @@ import socket
 from threading import Event, Lock, Thread
 from time import monotonic
 
-from src.reseau.protocol import Decoder, encode, validate
+from src.reseau.protocole import Decoder, encode, validate
 
 
 class CoordinationServer:

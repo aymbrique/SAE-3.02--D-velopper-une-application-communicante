@@ -3,9 +3,10 @@
 from itertools import combinations
 from math import hypot, inf
 import unittest
+from traffic_checks import assert_spacing
 
-from src.simulation.engine import GAP, Simulation
-from src.simulation.lights import Lights, Request
+from src.simulation.moteur import GAP, Simulation
+from src.simulation.feux import Lights, Request
 
 
 def tick(lights, duration, requests=(), busy=False, clear=True):
@@ -311,9 +312,7 @@ class SimulationTests(unittest.TestCase):
                 for step in range(1200):
                     sim.advance(.5)
                     self.assertLessEqual(len(sim.cars), 25)
-                    for a, b in combinations(sim.vehicles, 2):
-                        distance = hypot(a.position[0] - b.position[0], a.position[1] - b.position[1])
-                        self.assertGreaterEqual(distance, GAP - 1e-6, (sim.time, a.identifier, b.identifier))
+                    assert_spacing(self, sim)
                     inside = [v for v in sim.vehicles if v.crossing and v.crossing[0] < v.distance < v.crossing[1]]
                     for a, b in combinations(inside, 2):
                         self.assertTrue(sim.can_share_crossing(a, b))

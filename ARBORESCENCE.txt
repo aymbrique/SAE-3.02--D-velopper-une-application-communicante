@@ -1,0 +1,34 @@
+SAE302-GitHub/
+├── main.py                       Lancer la simulation
+├── centre.py                     Lancer le centre TCP
+├── init_db.py                    Creer les tables
+├── src/
+│   ├── configuration.py          Lire les parametres
+│   ├── modeles/
+│   │   ├── vehicules.py           MODELE DES VOITURES ET DES SECOURS
+│   │   ├── trajet.py              Calculer une position sur un trajet
+│   │   └── plan.py                Routes et destinations
+│   ├── simulation/
+│   │   ├── moteur.py              Faire avancer les vehicules
+│   │   ├── priorite.py            Se ranger et laisser passer les secours
+│   │   └── feux.py                Feux et compensation
+│   ├── interface/
+│   │   ├── fenetre_simulation.py  Commandes de la simulation
+│   │   ├── carte.py               Dessin 2D
+│   │   └── fenetre_centre.py      Tableaux du centre
+│   ├── reseau/
+│   │   ├── client.py              Envoyer les etats
+│   │   ├── serveur.py             Recevoir les etats
+│   │   └── protocole.py           Format JSON et validation
+│   └── stockage/
+│       └── mariadb.py             Acces a la base
+├── sql/                          Definition des tables
+├── tests/                        Tests automatiques
+├── exemples/                     Ancienne animation, hors application
+├── docs/                         Guides et cahier des charges
+├── config.example.ini            Exemple de configuration
+└── requirements.txt              Bibliotheques Python
+
+Dans PyCharm : File > Open > PycharmProjects > SAE302-GitHub.
+Deplier src, puis modeles pour retrouver vehicules.py.
+Les fichiers __init__.py permettent les imports entre les dossiers Python.

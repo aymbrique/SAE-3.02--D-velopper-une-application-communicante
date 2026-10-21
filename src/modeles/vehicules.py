@@ -2,7 +2,8 @@
 
 # dataclass cree le constructeur de ces simples fiches de donnees.
 from dataclasses import dataclass
-from src.models.route import Route
+from math import cos, radians, sin
+from src.modeles.trajet import Route
 
 
 @dataclass
@@ -26,6 +27,9 @@ class Vehicle:
     origin: str = ""
     turn: str = ""
     destination: str = "S"
+    lateral_offset: float = 0.0
+    yielding_to: tuple[str, ...] = ()
+    current_speed: float = 0.0
 
     @property
     def crossing(self):
@@ -35,7 +39,10 @@ class Vehicle:
 
     @property
     def position(self):
-        return self.route.sample(self.distance)
+        x, y, heading = self.route.sample(self.distance)
+        angle = radians(heading)
+        return (x - sin(angle) * self.lateral_offset,
+                y + cos(angle) * self.lateral_offset, heading)
 
 
 @dataclass(frozen=True)

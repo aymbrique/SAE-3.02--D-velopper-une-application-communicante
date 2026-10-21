@@ -4,7 +4,7 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QBrush, QColor, QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
-from src.models.layout import (CX, CY, LANE, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
+from src.modeles.plan import (CX, CY, LANE, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
                                DESTINATIONS, INTERVENTION_POINTS, NODES,
                                ROAD_SEGMENTS, SITE_ENTRANCES, PARKING_Y)
 

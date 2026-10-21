@@ -4,8 +4,8 @@ from collections import Counter
 from itertools import product
 import unittest
 
-from src.models.layout import SCENE_HEIGHT, SCENE_WIDTH, car_route
-from src.simulation.engine import GAP, Simulation
+from src.modeles.plan import SCENE_HEIGHT, SCENE_WIDTH, car_route
+from src.simulation.moteur import GAP, Simulation
 
 
 class SpawnTests(unittest.TestCase):

@@ -1,7 +1,7 @@
 """Plan commun au dessin et aux trajets : coordonnees du croquis utilisateur."""
 
 from math import hypot
-from src.models.route import Route, bezier
+from src.modeles.trajet import Route, bezier
 
 SCENE_WIDTH, SCENE_HEIGHT = 1600, 1100
 CX, CY = 450, 560
@@ -223,3 +223,30 @@ def rescue_route(identifier, parking_y, destination="S"):
 
 def car_exit(route):
     return route.crossings[0][1]
+
+
+def on_road(x, y):
+    """Chaussée dessinee, y compris les extremites ouvertes et la voie R-Q."""
+    for first, second in ROAD_SEGMENTS:
+        ax, ay = NODES[first]
+        bx, by = NODES[second]
+        if ax == bx:
+            top, bottom = sorted((ay, by))
+            if top == 0:
+                top = float('-inf')
+            left, right = ax - ROAD_HALF, ax + ROAD_HALF
+            if (first, second) == ("R", "Q"):
+                right = ax
+            if left <= x <= right and top <= y <= bottom:
+                return True
+        else:
+            left, right = sorted((ax, bx))
+            if left == 0:
+                left = float('-inf')
+            if right == SCENE_WIDTH:
+                right = float('inf')
+            if left <= x <= right and ay - ROAD_HALF <= y <= ay + ROAD_HALF:
+                return True
+    return any(abs(x - NODES[key][0]) <= ROAD_HALF
+               and abs(y - NODES[key][1]) <= ROAD_HALF
+               for key in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"))

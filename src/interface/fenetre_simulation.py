@@ -7,9 +7,9 @@ from PyQt6.QtWidgets import (
     QProgressBar, QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from src.interface.map_view import MapView
-from src.models.layout import DESTINATIONS, car_route, rescue_route
-from src.simulation.engine import Simulation
+from src.interface.carte import MapView
+from src.modeles.plan import DESTINATIONS, car_route, rescue_route
+from src.simulation.moteur import Simulation
 
 
 class MainWindow(QMainWindow):

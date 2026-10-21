@@ -4,8 +4,8 @@ import unittest
 from itertools import combinations
 from math import hypot
 
-from src.models.route import Route
-from src.simulation.demo import DemoScenario, car_route
+from src.modeles.trajet import Route
+from exemples.ancienne_animation import DemoScenario, car_route
 
 
 class RouteTests(unittest.TestCase):

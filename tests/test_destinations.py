@@ -4,9 +4,10 @@ from collections import Counter
 from itertools import combinations, product
 from math import hypot
 import unittest
+from traffic_checks import assert_spacing
 
-from src.models.layout import DESTINATIONS, INTERVENTION_POINTS, PARKING_X, PARKING_Y, rescue_route
-from src.simulation.engine import GAP, Simulation
+from src.modeles.plan import DESTINATIONS, INTERVENTION_POINTS, PARKING_X, PARKING_Y, rescue_route
+from src.simulation.moteur import GAP, Simulation
 
 
 class TrafficChangesTests(unittest.TestCase):
@@ -103,11 +104,7 @@ class TrafficChangesTests(unittest.TestCase):
                 sim.start_mission("02", second)
                 for index in range(1200):
                     sim.advance(.5)
-                    for a, b in combinations(sim.vehicles, 2):
-                        ax, ay, angle = a.position
-                        bx, by, angle = b.position
-                        self.assertGreaterEqual(hypot(ax-bx, ay-by), GAP-1e-6,
-                                                (sim.time, a.identifier, b.identifier))
+                    assert_spacing(self, sim)
                     inside = []
                     for vehicle in sim.vehicles:
                         if vehicle.identifier in sim.crossing_owners:

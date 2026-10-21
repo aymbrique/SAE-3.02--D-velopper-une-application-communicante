@@ -51,3 +51,18 @@ Une coupure change l'indication de liaison, pas l'etat disponible/occupe. Un mes
 Le centre ne commande pas les feux : ceux-ci appartiennent au moteur de la simulation. Il affiche et conserve les etats recus.
 
 Au feu principal, le choix aleatoire utilise 95 % tout droit, 2,5 % gauche et 2,5 % droite. Une voiture du Nord peut donc aller vers l'Est ou l'Ouest a ce feu. Parmi les parcours qui continuent vers le Sud, 5 % prennent ensuite la route du bas vers l'Ouest. Parmi ceux qui vont vers l'Est, 5 % tournent au raccordement du milieu vers le Nord. Il s'agit de probabilites conditionnelles, pas de quotas par groupe de voitures.
+
+## Fichiers et rangement des voitures
+
+Le code a des noms français : `src/modeles/vehicules.py` pour les véhicules,
+`src/modeles/plan.py` pour la géométrie, `src/simulation/moteur.py` pour les
+déplacements et `src/interface/carte.py` pour le dessin. Voir ARBORESCENCE.txt.
+
+À l'approche d'un secours, une voiture se décale réellement vers le bord droit
+de sa voie, reste arrêtée puis reprend après le passage. Elle finit d'abord
+un carrefour ou un virage déjà engagé, et cherche une place assez grande
+pour ne pas rester à moitié rangée. Les carrosseries gardent une marge libre.
+
+Les voitures d'une même approche peuvent entrer au vert même si la première
+tourne : les suivantes ralentissent. Les trajectoires qui se croisent gardent
+un passage successif. Le rouge, l'orange et les secours restent prioritaires.

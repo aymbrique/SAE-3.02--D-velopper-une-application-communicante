@@ -5,7 +5,7 @@ import unittest
 from uuid import uuid4
 
 from src.reseau.client import StateClient
-from src.reseau.server import CoordinationServer
+from src.reseau.serveur import CoordinationServer
 from src.stockage.mariadb import MariaDBStore
 from test_network import wait_for
 

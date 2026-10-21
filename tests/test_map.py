@@ -8,8 +8,8 @@ from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QColor, QImage, QPainter
 from PyQt6.QtWidgets import QApplication
 
-from src.interface.map_view import MapView
-from src.models.layout import CX, CY, NODES, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH, SITE_ENTRANCES
+from src.interface.carte import MapView
+from src.modeles.plan import CX, CY, NODES, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH, SITE_ENTRANCES
 
 
 class MapTests(unittest.TestCase):

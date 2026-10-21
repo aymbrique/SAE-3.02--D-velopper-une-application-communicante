@@ -3,8 +3,9 @@
 from itertools import combinations
 from math import hypot
 import unittest
+from traffic_checks import assert_spacing
 
-from src.simulation.engine import GAP, STEP, Simulation
+from src.simulation.moteur import GAP, STEP, Simulation
 
 
 class RescuePriorityTests(unittest.TestCase):
@@ -112,7 +113,7 @@ class RescuePriorityTests(unittest.TestCase):
         self.assertGreater(car.distance, car.crossings[0][0])
 
     def test_returning_rescues_in_same_queue_serve_front_vehicle_first(self):
-        from src.simulation.lights import Request
+        from src.simulation.feux import Request
         sim = Simulation(rate=0)
         sim.start_mission("01", "N")
         sim.start_mission("02", "E")
@@ -142,9 +143,7 @@ class RescuePriorityTests(unittest.TestCase):
         self.assertTrue(sim._junction_clear(car, car_stop, car_end, key))
         for _ in range(300):
             sim.advance(STEP)
-            for first, second in combinations(sim.vehicles, 2):
-                self.assertGreaterEqual(hypot(first.position[0] - second.position[0],
-                                             first.position[1] - second.position[1]), GAP - 1e-6)
+            assert_spacing(self, sim)
         self.assertGreater(rescue.distance, end)
 
     def test_available_rescue_does_not_stop_cars(self):
@@ -165,10 +164,7 @@ class RescuePriorityTests(unittest.TestCase):
         sim.start_mission("01", "E")
         for _ in range(1200):
             sim.advance(.5)
-            for first, second in combinations(sim.vehicles, 2):
-                self.assertGreaterEqual(hypot(first.position[0] - second.position[0],
-                                             first.position[1] - second.position[1]), GAP - 1e-6,
-                                        (sim.time, first.identifier, second.identifier))
+            assert_spacing(self, sim)
             if all(not rescue.busy for rescue in sim.rescues):
                 break
         self.assertTrue(all(not rescue.busy for rescue in sim.rescues))

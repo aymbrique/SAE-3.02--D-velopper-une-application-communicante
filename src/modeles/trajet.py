@@ -1,6 +1,7 @@
 """Un trajet contient des points et les distances cumulees entre ces points."""
 
 from math import atan2, degrees, hypot
+from bisect import bisect_right
 
 
 def bezier(start, control1, control2, end, steps=24):
@@ -40,10 +41,7 @@ class Route:
     def sample(self, distance):
         """Trouver la position et l'angle du vehicule sur le trajet."""
         distance = max(0.0, min(distance, self.length))
-        # Chercher entre quels points se trouve le vehicule.
-        index = 0
-        while index < len(self.points) - 2 and self.distances[index + 1] <= distance:
-            index += 1
+        index = min(len(self.points) - 2, bisect_right(self.distances, distance) - 1)
         start = self.points[index]
         end = self.points[index + 1]
         segment_length = self.distances[index + 1] - self.distances[index]

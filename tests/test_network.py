@@ -7,8 +7,8 @@ import unittest
 from uuid import uuid4
 
 from src.reseau.client import StateClient
-from src.reseau.protocol import Decoder, encode, validate
-from src.reseau.server import CoordinationServer
+from src.reseau.protocole import Decoder, encode, validate
+from src.reseau.serveur import CoordinationServer
 
 
 class MemoryStore:

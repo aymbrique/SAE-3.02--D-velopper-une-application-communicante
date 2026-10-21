@@ -7,7 +7,7 @@ algorithmes de circulation, de priorité et de réseau remplaceront ce scénario
 from bisect import bisect_right
 from dataclasses import dataclass
 
-from src.models.route import Route, bezier
+from src.modeles.trajet import Route, bezier
 
 
 CX, CY = 550, 430

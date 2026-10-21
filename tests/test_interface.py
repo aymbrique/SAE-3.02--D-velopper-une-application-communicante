@@ -8,10 +8,10 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtWidgets import QApplication
 
-from src.interface.main_window import MainWindow
-from src.interface.coordination_window import CoordinationWindow
+from src.interface.fenetre_simulation import MainWindow
+from src.interface.fenetre_centre import CoordinationWindow
 from src.reseau.client import StateClient
-from src.reseau.server import CoordinationServer
+from src.reseau.serveur import CoordinationServer
 from test_network import MemoryStore, wait_for
 
 
@@ -51,7 +51,7 @@ class InterfaceTests(unittest.TestCase):
         window = MainWindow()
         self.addCleanup(window.close)
         lights = window.scenario.lights
-        from src.simulation.lights import Request
+        from src.simulation.feux import Request
         # Un vert NS prolonge a 22 s doit stocker 14 s sur la ligne horizontale.
         for _ in range(440):
             lights.advance(.05, [Request("02", "NS", 0, 0)], busy=True)

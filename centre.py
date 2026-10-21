@@ -5,8 +5,8 @@ import sys
 
 import pymysql
 
-from src.config import database_config, network_config, read_config
-from src.reseau.server import CoordinationServer
+from src.configuration import database_config, network_config, read_config
+from src.reseau.serveur import CoordinationServer
 from src.stockage.mariadb import MariaDBStore
 
 
@@ -35,7 +35,7 @@ def main():
                 return 0
         else:
             from PyQt6.QtWidgets import QApplication
-            from src.interface.coordination_window import CoordinationWindow
+            from src.interface.fenetre_centre import CoordinationWindow
             app = QApplication(sys.argv)
             app.setStyle("Fusion")
             window = CoordinationWindow(server)

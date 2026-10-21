@@ -6,7 +6,7 @@ from threading import Event, Lock, Thread
 from time import monotonic
 from uuid import uuid4
 
-from src.reseau.protocol import Decoder, encode
+from src.reseau.protocole import Decoder, encode
 
 
 class StateClient:

@@ -4,7 +4,8 @@ from itertools import combinations
 from math import hypot
 import unittest
 
-from src.simulation.engine import GAP, STEP, Simulation
+from src.simulation.moteur import GAP, STEP, Simulation
+from traffic_checks import assert_spacing
 
 
 class TrafficFlowTests(unittest.TestCase):
@@ -18,11 +19,7 @@ class TrafficFlowTests(unittest.TestCase):
         return cars
 
     def assert_gaps(self, sim):
-        for first, second in combinations(sim.vehicles, 2):
-            distance = hypot(first.position[0] - second.position[0],
-                             first.position[1] - second.position[1])
-            self.assertGreaterEqual(distance, GAP - 1e-6,
-                                    (sim.time, first.identifier, second.identifier))
+        assert_spacing(self, sim)
 
     def test_two_queues_follow_through_one_green_on_both_axes(self):
         for first, second, axis in (("N", "S", "NS"), ("E", "W", "EW")):
@@ -84,7 +81,7 @@ class TrafficFlowTests(unittest.TestCase):
         rescue = sim.get_rescue("01")
         stop = rescue.crossing[0]
         rescue.distance = stop
-        sim.advance(STEP)
+        sim.advance(1.5)  # Laisser la voiture se ranger avant le depassement.
         self.assertGreater(rescue.distance, stop)
         self.assertIn(rescue.identifier, sim.crossing_owners)
         self.assert_gaps(sim)
@@ -117,25 +114,28 @@ class TrafficFlowTests(unittest.TestCase):
         self.assertAlmostEqual(leader.distance - follower.distance, GAP)
         self.assertFalse(follower.waiting)
 
-    def test_turning_leader_blocks_straight_follower_until_clear(self):
+    def test_turning_leader_allows_straight_follower_to_enter_slowly(self):
         for turn in ("left", "right"):
             with self.subTest(turn=turn):
                 sim = Simulation(rate=0)
                 leader = sim.spawn("N", turn)
-                leader.distance = leader.crossing[0] + GAP
+                leader.distance = leader.crossing[0] + 70
                 sim.crossing_owners.add(leader.identifier)
                 follower = sim.spawn("N", "straight")
                 follower.distance = follower.crossing[0]
                 sim.advance(STEP)
-                self.assertEqual(follower.distance, follower.crossing[0])
-                self.assertFalse(sim.can_share_crossing(leader, follower))
+                self.assertGreater(follower.distance, follower.crossing[0])
+                self.assertLess(follower.current_speed, follower.speed)
+                self.assertTrue(sim.can_share_crossing(leader, follower))
+                self.assertIn(follower.identifier, sim.crossing_owners)
+                self.assertIn(leader.identifier, sim.crossing_owners)
                 for step in range(200):
                     sim.advance(STEP)
                     self.assert_gaps(sim)
                     if follower.identifier in sim.crossing_owners:
                         break
                 self.assertIn(follower.identifier, sim.crossing_owners)
-                self.assertNotIn(leader.identifier, sim.crossing_owners)
+                self.assert_gaps(sim)
 
     def test_convoy_waits_at_orange_and_other_axis_waits_until_everyone_leaves(self):
         sim = Simulation(rate=0)

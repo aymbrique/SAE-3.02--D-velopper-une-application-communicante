@@ -5,7 +5,7 @@ import sys
 
 import pymysql
 
-from src.config import database_config, read_config
+from src.configuration import database_config, read_config
 from src.stockage.mariadb import MariaDBStore
 
 

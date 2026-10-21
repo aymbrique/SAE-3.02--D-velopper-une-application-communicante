@@ -3,9 +3,10 @@
 from itertools import combinations
 from math import hypot
 import unittest
+from traffic_checks import assert_spacing
 
-from src.simulation.engine import GAP, STEP, Simulation
-from src.simulation.lights import Request
+from src.simulation.moteur import GAP, STEP, Simulation
+from src.simulation.feux import Request
 
 
 class StationDispatchTests(unittest.TestCase):
@@ -34,11 +35,7 @@ class StationDispatchTests(unittest.TestCase):
             if crossing and previous <= crossing[0] < vehicle.distance:
                 self.assertEqual(sim.lights.signal(crossing[2]), "green",
                                  (sim.time, vehicle.identifier, "entree au rouge"))
-        for first, second in combinations(sim.vehicles, 2):
-            self.assertGreaterEqual(
-                hypot(first.position[0] - second.position[0],
-                      first.position[1] - second.position[1]),
-                GAP - 1e-6, (sim.time, first.identifier, second.identifier))
+        assert_spacing(self, sim)
 
     def first_station_zone(self, rescue):
         return next(zone for zone in rescue.route.junctions if zone[2] == "F")
@@ -62,7 +59,7 @@ class StationDispatchTests(unittest.TestCase):
                 for _ in range(60):
                     self.step_safely(sim)
                 self.assertEqual(sim.lights.signal("NS"), "green")
-                self.assertTrue(all(car.distance > previous[car.identifier]
+                self.assertTrue(all(car.distance > previous[car.identifier] or car.lateral_offset > 0
                                     for car in downstream))
 
     def test_upstream_yields_while_existing_queue_drains_then_follows_rescue(self):
@@ -81,7 +78,7 @@ class StationDispatchTests(unittest.TestCase):
                                         for car in upstream))
                 self.assertGreaterEqual(rescue.distance, station_end)
                 self.assertLess(sim.time, 40)
-                self.assertTrue(all(car.distance > previous[car.identifier]
+                self.assertTrue(all(car.distance > previous[car.identifier] or car.lateral_offset > 0
                                     for car in downstream))
                 for _ in range(100):
                     self.step_safely(sim)

@@ -3,10 +3,12 @@
 from math import cos, hypot, inf, isfinite, radians, sin
 from random import Random
 
-from src.models.layout import (DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y,
-                               SCENE_WIDTH, SCENE_HEIGHT, car_exit, car_route, rescue_route)
-from src.models.vehicle import Frame, Vehicle, VehicleState
-from src.simulation.lights import Lights, Request
+from src.modeles.plan import (DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y,
+                               SCENE_WIDTH, SCENE_HEIGHT, car_exit, car_route, rescue_route, on_road)
+from src.modeles.vehicules import Frame, Vehicle, VehicleState
+from src.simulation.feux import Lights, Request
+from src.simulation.priorite import (PULL_OVER, SIDE_SPEED, beside_rescue,
+                                     bodies_clear, corners)
 
 STEP = 0.05  # Duree d'un calcul de deplacement, en secondes simulees.
 GAP = 44.0  # Distance minimale entre les centres des vehicules.
@@ -178,6 +180,7 @@ class Simulation:
 
     def _step(self):
         self.time += STEP
+        self._update_yielding()
         rescue_busy = False
         for rescue in self.rescues:
             if rescue.busy:
@@ -208,22 +211,81 @@ class Simulation:
                     or (vehicle.kind == "car" and vehicle.crossing is None))
         return (not clearing, -vehicle.distance, vehicle.identifier)
 
-    def _clear_path(self, vehicle, target, ignored=()):
-        x, y, _ = vehicle.route.sample(target)
+    def _position(self, vehicle, distance, offset=None):
+        x, y, heading = vehicle.route.sample(distance)
+        offset = vehicle.lateral_offset if offset is None else offset
+        return (x - sin(radians(heading)) * offset,
+                y + cos(radians(heading)) * offset, heading)
+
+    def pair_clear(self, first, second, position=None, other_position=None):
+        position = first.position if position is None else position
+        other_position = second.position if other_position is None else other_position
+        distance = hypot(position[0] - other_position[0], position[1] - other_position[1])
+        if distance >= GAP - 1e-7:
+            return True
+        if first.identifier in self.crossing_owners and second.identifier in self.crossing_owners:
+            return False
+        if abs(first.lateral_offset) > 1e-6 or abs(second.lateral_offset) > 1e-6:
+            return bodies_clear(first, position, second, other_position)
+        return False
+
+    def _clear_position(self, vehicle, position, ignored=()):
         for other in self.vehicles:
             if other is vehicle or other.identifier in ignored:
                 continue
-            ox, oy, _ = other.position
-            if hypot(x - ox, y - oy) < GAP - 1e-7:
+            if not self.pair_clear(vehicle, other, position):
                 return False
         return True
+
+    def _clear_path(self, vehicle, target, ignored=()):
+        return self._clear_position(vehicle, self._position(vehicle, target), ignored)
+
+    def _can_pull_over(self, car):
+        if car.identifier in self.crossing_owners or car.speed <= 0:
+            return False
+        _, _, before = car.route.sample(car.distance - 20)
+        _, _, after = car.route.sample(car.distance + 20)
+        if cos(radians(before - after)) < .995:
+            return False
+        # Finir de traverser un acces avant de s'immobiliser sur son bord.
+        return not any(stop + 20 < car.distance < end - 20
+                       for stop, end, _ in car.route.junctions)
+
+    def _update_yielding(self):
+        for car in self.cars:
+            nearby = tuple(rescue.identifier for rescue in self.rescues
+                           if beside_rescue(car, rescue))
+            can_park = (car.identifier not in self.crossing_owners
+                        and (self._can_pull_over(car) or car.lateral_offset > 0))
+            if nearby and can_park:
+                # Choisir une place entiere : ne pas rester coince a mi-decalage
+                # a cote d'une voiture qui s'est deja rangee.
+                parked = self._position(car, car.distance, PULL_OVER)
+                previous = car.lateral_offset
+                car.lateral_offset = PULL_OVER
+                can_park = (all(on_road(x, y) for x, y in corners(car, parked))
+                            and self._clear_position(car, parked))
+                car.lateral_offset = previous
+            car.yielding_to = nearby if can_park else ()
+            target = PULL_OVER if car.yielding_to else 0.0
+            old = car.lateral_offset
+            change = min(SIDE_SPEED * STEP, abs(target - old))
+            offset = old + (change if target > old else -change)
+            if abs(offset - old) < 1e-9:
+                continue
+            position = self._position(car, car.distance, offset)
+            if not all(on_road(x, y) for x, y in corners(car, position)):
+                continue
+            car.lateral_offset = offset
+            if not self._clear_position(car, position):
+                car.lateral_offset = old
 
     def can_share_crossing(self, first, second):
         """Suivi tout droit et mouvements opposes sans croisement de trajectoire."""
         if first.kind != "car" or second.kind != "car" or first.origin not in OPPOSITE:
             return False
         if second.origin == first.origin:
-            return first.turn == second.turn
+            return True
         return (second.origin == OPPOSITE[first.origin]
                 and first.turn in ("straight", "right")
                 and second.turn in ("straight", "right"))
@@ -261,10 +323,21 @@ class Simulation:
 
     def _can_enter(self, vehicle):
         stop, end, axis = vehicle.crossing
+        if vehicle.kind == "car" and vehicle.lateral_offset == 0:
+            for other in self.cars:
+                if (other is not vehicle and other.origin == vehicle.origin
+                        and other.lateral_offset > 0 and not other.yielding_to
+                        and vehicle.distance - 28 < other.distance < vehicle.distance + 150):
+                    return False  # Laisser la voiture rangee reintegrer sa file.
         for other in self.vehicles:
             if other.identifier in self.crossing_owners and other is not vehicle:
                 if not self.can_share_crossing(vehicle, other):
                     return False
+                if vehicle.lateral_offset > 0 or other.lateral_offset > 0:
+                    point = self._position(vehicle, vehicle.distance + vehicle.speed * STEP)
+                    ox, oy, _ = other.position
+                    if hypot(point[0] - ox, point[1] - oy) < GAP - 1e-7:
+                        return False
         if self.lights.signal(axis) != "green":
             return False
         if vehicle.kind == "car" and self.lights.owner:
@@ -293,7 +366,11 @@ class Simulation:
         return True
 
     def _move(self, vehicle):
+        vehicle.current_speed = 0.0
         if vehicle.kind != "car" and not vehicle.busy:
+            return
+        if vehicle.kind == "car" and vehicle.yielding_to:
+            vehicle.waiting = True
             return
         if vehicle.dwell_remaining > 0:
             vehicle.dwell_remaining = max(0.0, vehicle.dwell_remaining - STEP)
@@ -304,6 +381,24 @@ class Simulation:
         if vehicle.kind == "car" and any(start <= old < end
                                          for start, end in vehicle.route.turn_zones):
             speed *= TURN_SPEED_FACTOR
+        if vehicle.kind == "car":
+            x, y, angle = vehicle.position
+            dx, dy = cos(radians(angle)), sin(radians(angle))
+            for other in self.cars:
+                if other is vehicle:
+                    continue
+                ox, oy, _ = other.position
+                ahead = (ox - x) * dx + (oy - y) * dy
+                lateral = abs((ox - x) * dy - (oy - y) * dx)
+                if (other.lateral_offset > 0 and not other.yielding_to
+                        and -20 < ahead < GAP + 12 and lateral < 40):
+                    speed = min(speed, 18.0)
+                if other.identifier not in self.crossing_owners:
+                    continue
+                if other.turn == "straight" or other.turn == vehicle.turn:
+                    continue
+                if 0 < ahead < 150 and lateral < 70:
+                    speed = min(speed, 18.0)
         target = min(old + speed * STEP, vehicle.route.length)
         target = self._limit_at_junctions(vehicle, old, target)
         crossing = vehicle.crossing
@@ -312,8 +407,20 @@ class Simulation:
             target = crossing[0]
         if vehicle.hospital is not None and not vehicle.visited:
             target = min(target, vehicle.hospital)
-        if target > old and self._clear_path(vehicle, target):
+        if target > old and not self._clear_path(vehicle, target):
+            low, high = old, target
+            if not self._clear_path(vehicle, old + min(.05, target - old)):
+                high = old
+            for _ in range(8 if high > old else 0):
+                middle = (low + high) / 2
+                if self._clear_path(vehicle, middle):
+                    low = middle
+                else:
+                    high = middle
+            target = low
+        if target > old + 1e-7 and self._clear_path(vehicle, target):
             vehicle.distance = target
+            vehicle.current_speed = (target - old) / STEP
             if entering and target > crossing[0]:
                 self.crossing_owners.add(vehicle.identifier)
         vehicle.waiting = vehicle.distance <= old + 1e-9
@@ -350,6 +457,10 @@ class Simulation:
         following = set()
         for other in self.vehicles:
             if other is vehicle or (other.kind != "car" and not other.busy):
+                continue
+            if other.kind == "car" and other.lateral_offset > 0:
+                # La reservation sur la voie normale ne decrit plus sa position.
+                # Le balayage ci-dessous controle sa carrosserie reellement rangee.
                 continue
             for other_stop, other_end, other_key in other.route.junctions:
                 if key != other_key:
@@ -450,6 +561,10 @@ class Simulation:
         for vehicle in self.vehicles:
             x, y, heading = vehicle.position
             stage = "A l'arret" if vehicle.waiting else "En circulation"
+            if vehicle.kind == "car" and vehicle.yielding_to:
+                stage = "Range sur le cote - priorite secours " + ", ".join(vehicle.yielding_to)
+            elif vehicle.kind == "car" and vehicle.lateral_offset > 1e-6:
+                stage = "Reprise apres le passage du secours"
             if vehicle.kind != "car":
                 if not vehicle.busy:
                     stage = "A la caserne"

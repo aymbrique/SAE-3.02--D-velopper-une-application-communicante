@@ -4,16 +4,13 @@ from itertools import combinations
 from math import hypot
 import unittest
 
-from src.simulation.engine import GAP, STEP, Simulation
+from src.simulation.moteur import GAP, STEP, Simulation
+from traffic_checks import assert_spacing
 
 
 class SecondaryFlowTests(unittest.TestCase):
     def assert_gaps(self, sim):
-        for first, second in combinations(sim.vehicles, 2):
-            self.assertGreaterEqual(
-                hypot(first.position[0] - second.position[0],
-                      first.position[1] - second.position[1]),
-                GAP - 1e-6, (sim.time, first.identifier, second.identifier))
+        assert_spacing(self, sim)
 
     def zone(self, car, key):
         return next(zone for zone in car.route.junctions if zone[2] == key)
@@ -147,7 +144,7 @@ class SecondaryFlowTests(unittest.TestCase):
                 if not moving:
                     car.speed = 0
                 stop = rescue.distance
-                sim.advance(STEP)
+                sim.advance(2 if moving else STEP)
                 self.assert_gaps(sim)
                 if moving:
                     self.assertGreater(rescue.distance, stop)
@@ -202,7 +199,7 @@ class SecondaryFlowTests(unittest.TestCase):
                     self.assertEqual(sim.crossing_owners, {first.identifier, second.identifier})
                     self.advance_safely(sim, 5)
 
-    def test_left_turns_and_same_approach_turns_remain_exclusive(self):
+    def test_opposing_left_turns_wait_but_same_approach_can_follow(self):
         for first_origin, opposite_origin, axis in (("N", "S", "NS"), ("E", "W", "EW")):
             for first_turn, second_origin, second_turn in (
                     ("straight", opposite_origin, "left"),
@@ -219,11 +216,13 @@ class SecondaryFlowTests(unittest.TestCase):
                         sim.crossing_owners.add(first.identifier)
                     second = sim.spawn(second_origin, second_turn)
                     second.distance = second.crossing[0]
-                    self.assertFalse(sim.can_share_crossing(first, second))
+                    self.assertEqual(sim.can_share_crossing(first, second), second_origin == first_origin)
                     sim.advance(STEP)
-                    self.assertEqual(len(sim.crossing_owners), 1)
                     if second_origin == first_origin:
-                        self.assertEqual(second.distance, second.crossing[0])
+                        self.assertEqual(len(sim.crossing_owners), 2)
+                        self.assertGreater(second.distance, second.crossing[0])
+                    else:
+                        self.assertEqual(len(sim.crossing_owners), 1)
                     self.assert_gaps(sim)
 
 

@@ -5,8 +5,8 @@ import argparse
 
 from PyQt6.QtWidgets import QApplication
 
-from src.interface.main_window import MainWindow
-from src.config import read_config, network_config
+from src.interface.fenetre_simulation import MainWindow
+from src.configuration import read_config, network_config
 from src.reseau.client import StateClient
 
 
@@ -26,7 +26,7 @@ def main():
     if not 1 <= port <= 65535:
         parser.error("Port TCP invalide")
     app = QApplication(sys.argv)
-    app.setApplicationName("SAE302 - Facture Sucrée")
+    app.setApplicationName("SAE302 - Circulation")
     app.setStyle("Fusion")
     client = None
     if not args.local:

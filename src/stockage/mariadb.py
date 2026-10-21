@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pymysql
 from pymysql.cursors import DictCursor
 
-from src.config import ROOT
+from src.configuration import ROOT
 
 
 class MariaDBStore:
