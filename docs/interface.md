@@ -22,6 +22,13 @@ L'onglet **Reseau** affiche l'adresse, la liaison et le nombre de mises a jour n
 
 La carte est volontairement simple : fond vert hors des routes, quatre points d'intervention, routes grises, feux ronds, voitures bleues, pompier 01 rouge et ambulance 02 blanche. Les vehicules sont des rectangles.
 
+Les points d'intervention sont associés à quatre bâtiments : mairie à l'ouest
+(point 1), restaurant au sud-ouest (point 2), IUT de Colmar au nord-est
+(point 3) et E.Leclerc à l'est (point 4). Chacun possède un petit parking gris
+accolé au bâtiment et une allée jusqu'à la route. Le rectangle jaune indique
+l'arrêt du secours. Les bâtiments sont dessinés avec les rectangles, polygones
+et textes de PyQt6 dans `src/interface/batiments.py`, sans image importée.
+
 Les voitures arrivent depuis l'exterieur des extremites visibles des routes, y compris les marges dues au format de la fenetre. Elles ne sont pas inserees au milieu d'une voie. La moitie des tirages d'arrivee vient du Nord ; les trois autres origines se partagent l'autre moitie. Une entree occupee peut retarder l'apparition.
 
 Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage initial. **Afficher un trajet** : choix parmi les huit parcours de secours (deux vehicules et quatre destinations) et les dix-huit trajets de voiture (douze de base et six variantes). Survoler un vehicule affiche son identifiant et sa situation.

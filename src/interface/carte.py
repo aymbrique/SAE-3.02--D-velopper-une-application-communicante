@@ -4,9 +4,9 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QBrush, QColor, QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
+from src.interface.batiments import draw_intervention_sites
 from src.modeles.plan import (CX, CY, LANE, ROAD_HALF, SCENE_HEIGHT, SCENE_WIDTH,
-                               DESTINATIONS, INTERVENTION_POINTS, NODES,
-                               ROAD_SEGMENTS, SITE_ENTRANCES, PARKING_Y)
+                               NODES, ROAD_SEGMENTS, PARKING_Y)
 
 
 SIGNAL_COLORS = {"red": "red", "amber": "orange", "green": "green"}
@@ -114,15 +114,7 @@ class MapView(QGraphicsView):
         for identifier, y in PARKING_Y.items():
             self.text("Place " + identifier, 197, y - 9)
 
-        # Aires d'intervention : meme gris clair et meme rectangle jaune qu'avant.
-        # Les carres bleus du croquis indiquaient uniquement leurs emplacements.
-        for side, entrance in SITE_ENTRANCES.items():
-            x, y = NODES["site_" + side]
-            road_y = NODES[entrance][1]
-            self.rectangle(x - 70, y - 90, 140, road_y - ROAD_HALF - y + 90, "lightgray")
-            px, py = INTERVENTION_POINTS[side]
-            self.rectangle(px - 22, py - 14, 44, 28, "#ffe091")
-            self.text("Intervention " + DESTINATIONS[side], x - 85, y - 115)
+        draw_intervention_sites(self.scene())
 
         # Un seul carrefour a feux, a l'emplacement de la croix verte du croquis.
         stop = QPen(QColor("white"), 4)
