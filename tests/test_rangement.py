@@ -11,9 +11,53 @@ from PyQt6.QtGui import QPainterPath, QPolygonF
 from src.simulation.moteur import GAP, STEP, Simulation
 from src.simulation.priorite import PULL_OVER, corners
 from src.modeles.plan import on_road
+from traffic_checks import assert_spacing
 
 
 class RangementTests(unittest.TestCase):
+    def test_opposite_lower_turns_finish_after_yielding_before_junction(self):
+        for identifier in ("01", "02"):
+            for variant in (None, "lower_west"):
+                with self.subTest(rescue=identifier, variant=variant):
+                    sim = Simulation(rate=0)
+                    sim.start_mission(identifier, "S")
+                    rescue = sim.get_rescue(identifier)
+                    rescue.crossing_index = 1
+                    stop = next(stop for stop, _, key in rescue.route.junctions if key == "D")
+                    rescue.distance = stop - 300
+                    car = sim.spawn("N", "straight", variant=variant)
+                    car.crossing_index = 1
+                    car_stop, car_end, _ = next(zone for zone in car.route.junctions if zone[2] == "D")
+                    car.distance = car_stop - car.manoeuvre_length
+                    for _ in range(1800):
+                        sim.advance(STEP)
+                        assert_spacing(self, sim)
+                        self.assertTrue(all(on_road(x, y) for x, y in corners(car, car.position)))
+                        if not rescue.busy and car.distance >= car.route.length:
+                            break
+                    self.assertGreater(car.distance, car_end)
+                    self.assertFalse(rescue.busy)
+                    self.assertGreaterEqual(car.distance, car.route.length)
+
+    def test_rescue_waits_for_roadside_car_already_in_lower_junction(self):
+        sim = Simulation(rate=0)
+        sim.start_mission("01", "S")
+        rescue = sim.get_rescue("01")
+        rescue.crossing_index = 1
+        stop, end, _ = next(zone for zone in rescue.route.junctions if zone[2] == "D")
+        rescue.distance = stop - 100
+        car = sim.spawn("N", "straight")
+        car.crossing_index = 1
+        car_stop, car_end, _ = next(zone for zone in car.route.junctions if zone[2] == "D")
+        car.distance = car_stop + 10
+        car.lateral_offset = PULL_OVER
+        for _ in range(500):
+            sim.advance(STEP)
+            assert_spacing(self, sim)
+        self.assertGreater(car.distance, car_end)
+        self.assertGreater(rescue.distance, end)
+        self.assertEqual(car.lateral_offset, 0)
+
     def test_pull_over_and_merge_keep_a_moderate_angle_inside_road(self):
         sim = Simulation(rate=0)
         car = sim.spawn("N", "straight")

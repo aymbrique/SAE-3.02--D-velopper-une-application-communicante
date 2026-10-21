@@ -34,6 +34,12 @@ l'orientation dessinée suit le déplacement. Une voiture bloquée ne glisse pas
 sur le côté. Une fois rangée, elle attend le passage du secours, puis rejoint
 sa voie avec la même manœuvre.
 
+Le rangement doit se terminer avant l'entrée d'un raccordement. Une voiture
+déjà engagée continue à dégager le virage au lieu de s'y arrêter pour se ranger.
+La réservation du passage tient aussi compte des voitures décalées et de leur
+réinsertion, avec leur position et leur angle réels. Un secours ne s'engage pas
+dans une courbe qui couperait une manœuvre déjà commencée.
+
 L'ordre de la file est conservé sur la voie habituelle, avec 44 unités entre
 les centres, même si le véhicule de tête s'est rangé. Les suivantes attendent
 et lui rendent sa place. Si une manœuvre reste inachevée faute de place, les

@@ -12,6 +12,8 @@ python -m unittest discover -s tests -v
 - Passage des voitures compatibles au vert, y compris derrière un virage.
 - Rangement en avançant, déport limité à 22 unités et braquage inférieur à 25 degrés.
 - Passage et réinsertion près du virage du bas, sans sortie de route ni contact.
+- Virages opposés au raccordement du bas après un rangement, avec les deux types de secours.
+- Dégagement d'une voiture déjà décalée dans ce raccordement avant le virage du secours.
 - Conservation de l'ordre dans la file pendant le rangement et la reprise.
 - Secours plus rapides et passage au vert sans réservation inutile de tout le carrefour.
 - Absence de contact entre les rectangles orientés, vérifiée avec les polygones Qt.

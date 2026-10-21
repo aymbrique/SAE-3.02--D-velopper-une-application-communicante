@@ -282,14 +282,16 @@ class Simulation:
             if cos(radians(before - after)) < .995:
                 return False
         # Ne jamais se garer au milieu d'un raccordement.
-        return not any(stop + 20 < end and car.distance < finish - 20
+        return not any(stop < end and car.distance < finish
                        for stop, finish, _ in car.route.junctions)
 
     def _update_yielding(self):
         for car in self.cars:
             nearby = tuple(rescue.identifier for rescue in self.rescues
                            if beside_rescue(car, rescue))
-            can_park = (car.identifier not in self.crossing_owners
+            in_junction = any(stop < car.distance < end
+                              for stop, end, _ in car.route.junctions)
+            can_park = (car.identifier not in self.crossing_owners and not in_junction
                         and (self._can_pull_over(car) or car.lateral_offset > 0
                              or (car.manoeuvre_start is not None
                                  and car.manoeuvre_target == PULL_OVER)))
@@ -653,10 +655,6 @@ class Simulation:
         for other in self.vehicles:
             if other is vehicle or (other.kind != "car" and not other.busy):
                 continue
-            if other.kind == "car" and other.lateral_offset > 0:
-                # La reservation sur la voie normale ne decrit plus sa position.
-                # Le balayage ci-dessous controle sa carrosserie reellement rangee.
-                continue
             for other_stop, other_end, other_key in other.route.junctions:
                 if key != other_key:
                     continue
@@ -696,19 +694,30 @@ class Simulation:
             return True  # Les aires et le stationnement restent exclusifs.
         # Inclure la fin du balayage : au retour F, les deux places divergent
         # juste apres le raccordement, meme si leur mouvement est identique.
-        cache_key = (key, first_move, other_move, vehicle.route.sample(end + 46)[:2])
+        def manoeuvre_state(item, start):
+            return ((item.manoeuvre_start - start, item.manoeuvre_from,
+                     item.manoeuvre_target, item.manoeuvre_length)
+                    if item.manoeuvre_start is not None else (None, item.lateral_offset))
+
+        adjusted = (vehicle.manoeuvre_start is not None or other.manoeuvre_start is not None
+                    or vehicle.lateral_offset != 0 or other.lateral_offset != 0)
+        cache_key = (key, first_move, other_move, vehicle.kind, other.kind,
+                     vehicle.route.sample(end + 46)[:2],
+                     manoeuvre_state(vehicle, stop), manoeuvre_state(other, other_stop))
         if cache_key not in self.junction_conflicts:
             # Les memes mouvements au meme raccordement ont la meme geometrie.
             # Calculer une seule fois ou l'autre vehicule finit de nous couper
             # la route ; ajouter une marge pour l'echantillonnage de 3 unites.
-            path = [vehicle.route.sample(stop + offset)[:2]
+            path = [vehicle.position_at(stop + offset)
                     for offset in range(0, int(end - stop) + 47, 3)]
             last_conflict = -inf
             offsets = list(range(0, int(other_end - other_stop) + 1, 3))
             offsets.append(other_end - other_stop)
             for offset in offsets:
-                x, y, _ = other.route.sample(other_stop + offset)
-                if any(hypot(x - px, y - py) < GAP + 3 for px, py in path):
+                position = other.position_at(other_stop + offset)
+                if any(hypot(position[0] - point[0], position[1] - point[1]) < GAP + 3
+                       and (not adjusted or not bodies_clear(vehicle, point, other, position))
+                       for point in path):
                     last_conflict = offset + 3
             self.junction_conflicts[cache_key] = last_conflict
         return other.distance - other_stop <= self.junction_conflicts[cache_key]
