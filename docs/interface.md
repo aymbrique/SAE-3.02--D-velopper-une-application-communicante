@@ -37,7 +37,15 @@ Les voitures s'arretent au rouge et a l'orange devant le vrai feu. Au vert, les 
 
 Le carrefour a feux se trouve a gauche du plan. Devant la caserne et aux autres raccordements sans feux, les voitures qui suivent le meme trajet local ou roulent tout droit en sens opposes avancent ensemble. Les voitures du Nord rejoignent la file du feu principal. Elles cedent le passage lorsqu'un secours approche de l'acces a la caserne, et reprennent des que sa trajectoire est degagee. Cette priorite vaut a l'aller comme au retour. Un vehicule deja engage peut terminer son passage ; une voiture devant le secours avance pour liberer sa voie.
 
-Le raccordement entre la route horizontale du milieu et celle du bas, a l'Est, est descendant : on peut le prendre depuis la gauche, ou continuer tout droit. Les voitures du bas ne le remontent pas ; celles venant de droite ne tournent pas vers le bas a cet endroit. Une fleche blanche rappelle ce sens. Les voitures arrivant du bas a droite restent sur la route inferieure jusqu'a leur parcours autorise.
+Le raccordement entre la route horizontale du milieu et celle du bas, a l'Est, est descendant : on peut le prendre depuis la gauche, ou continuer tout droit. Les voitures du bas ne le remontent pas ; celles venant de droite ne tournent pas vers le bas a cet endroit. Les voitures arrivant du bas a droite restent sur la route inferieure jusqu'a leur parcours autorise.
+
+Cette petite voie porte un décor de travaux : sol de chantier, cônes, barrières
+rouges et blanches, panneau triangulaire et indication « Route barrée ».
+Trois cédez-le-passage sont dessinés aux raccordements sans feux : arrivées du
+nord vers les routes du milieu et du bas, et arrivée de l'est sur la route
+supérieure. Les panneaux et travaux sont uniquement décoratifs : ils ne
+changent pas les trajets ni les règles de circulation. Leur dessin se trouve
+dans `src/interface/signalisation.py` et utilise seulement les formes de PyQt6.
 
 Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Des que le secours est a 150 m ou moins ou a 10 s d'arrivee ou moins, son feu est demande au vert, a l'aller comme au retour. Si l'autre axe est vert, il passe immediatement a l'orange, puis au tout rouge avant le vert du secours ; les vehicules deja engages finissent de degager. Une sortie occupee impose l'attente avant d'entrer, mais ne supprime plus la demande du vert.
 

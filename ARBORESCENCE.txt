@@ -16,6 +16,7 @@ SAE302-GitHub/
 │   │   ├── fenetre_simulation.py  Commandes de la simulation
 │   │   ├── carte.py               Dessin 2D
 │   │   ├── batiments.py           Batiments et parkings des interventions
+│   │   ├── signalisation.py       Travaux et panneaux decoratifs
 │   │   └── fenetre_centre.py      Tableaux du centre
 │   ├── reseau/
 │   │   ├── client.py              Envoyer les etats
