@@ -22,6 +22,9 @@ python -m unittest discover -s tests -v
 - Attente devant un secours immobilisé qui barre réellement l'accès à la caserne.
 - Virage d'un secours après une réinsertion au carrefour, sans attente jusqu'à la sortie complète.
 - Deux secours simultanés et les seize couples de destinations à 40 voitures/minute.
+- Deux secours face à face sur les deux axes : mission la plus ancienne,
+  maintien du choix jusqu'à la sortie, puis passage du second sans attendre
+  le retour complet du premier à la caserne.
 - Dix minutes à 60 voitures/minute, six interventions successives, graines 51 et 302.
 - Retour des missions, progression du trafic et durée limitée du tout rouge dans ces scénarios.
 - Arrivée à un point d'intervention ou en fin de trajet à une erreur flottante près.
@@ -30,6 +33,7 @@ python -m unittest discover -s tests -v
 
 Les régressions se trouvent dans `tests/test_rangement.py` et
 `tests/test_priorite_fluide.py`.
+L'arbitrage face à face est vérifié dans `tests/test_arbitrage_secours.py`.
 Les contrôles géométriques communs sont dans `tests/traffic_checks.py`.
 
 ## MariaDB

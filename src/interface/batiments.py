@@ -71,7 +71,7 @@ def draw_iut(scene, x, y):
     rectangle(scene, x, y, 220, 108, "#e3e2d8")
     rectangle(scene, x, y, 220, 8, "#456477")
     rectangle(scene, x + 12, y + 16, 196, 28, "#397a87")
-    label(scene, "IUT DE CLERMONT", x + 12, y + 21, 196, 17, "white")
+    label(scene, "IUT de Colmar", x + 12, y + 21, 196, 17, "white")
     for dx in (16, 56, 136, 176):
         rectangle(scene, x + dx, y + 54, 28, 18, "#8fb4c9")
         rectangle(scene, x + dx, y + 80, 28, 18, "#8fb4c9")

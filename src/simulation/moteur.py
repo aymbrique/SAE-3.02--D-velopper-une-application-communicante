@@ -142,8 +142,8 @@ class Simulation:
         for vehicle in self.rescues:
             distance, eta = self.approach(vehicle)
             returning_to_station = self._returning_station(vehicle)
-            if returning_to_station or (distance is not None and (
-                    distance <= 150 or eta <= 10 or self._leaving_station(vehicle))):
+            at_threshold = distance is not None and (distance <= 150 or eta <= 10)
+            if returning_to_station or at_threshold or self._leaving_station(vehicle):
                 # Demander le vert des l'approche, meme si la sortie est encore
                 # occupee. Le controle d'entree impose toujours sa liberation.
                 if vehicle.crossing and vehicle.identifier not in self.crossing_owners:
@@ -159,7 +159,9 @@ class Simulation:
                     vehicle.requested_at = self.time
                 axis = "NS" if returning_to_station else vehicle.crossing[2]
                 result.append(Request(vehicle.identifier, axis,
-                                      vehicle.started_at, vehicle.requested_at))
+                                      vehicle.started_at, vehicle.requested_at,
+                                      passage=vehicle.crossing_index if at_threshold else None,
+                                      engaged=vehicle.identifier in self.crossing_owners))
         return result
 
     def _leaving_station(self, vehicle):

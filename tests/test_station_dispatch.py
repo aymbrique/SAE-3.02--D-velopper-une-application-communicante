@@ -255,7 +255,7 @@ class StationDispatchTests(unittest.TestCase):
                 self.assertEqual(sim.lights.signal("NS"), "green")
                 self.assertTrue(rescue.busy)
 
-    def test_returning_owner_hands_green_to_north_before_next_rescue_crosses_east_west(self):
+    def test_return_releases_second_rescue_then_both_clear_station_with_north_queue(self):
         sim, _, _, _, _ = self.queued_north()
         sim.start_mission("01", "W")
         sim.start_mission("02", "E")
@@ -268,28 +268,26 @@ class StationDispatchTests(unittest.TestCase):
         second_stop = second.distance
         sim.crossing_owners.add(first.identifier)
         sim.lights.axis = "EW"
-        sim.lights.owner = Request(first.identifier, "EW", 0, 0)
+        sim.lights.owner = Request(first.identifier, "EW", 0, 0,
+                                   passage=1, engaged=True)
         self.step_safely(sim)
         self.assertIsNone(first.crossing)
         self.assertEqual(second.distance, second_stop)
         self.step_safely(sim)
-        self.assertEqual(sim.lights.owner.identifier, first.identifier)
-        self.assertEqual(sim.lights.owner.axis, "NS")
-        _, station_end, _ = [zone for zone in first.route.junctions if zone[2] == "F"][-1]
-        cleared_station = False
-        for _ in range(1000):
-            self.step_safely(sim)
-            if not first.busy or first.distance >= station_end:
-                cleared_station = True
-                break
-            self.assertEqual(sim.lights.owner.identifier, first.identifier)
-            self.assertEqual(sim.lights.owner.axis, "NS")
-            self.assertEqual(second.distance, second_stop)
-        self.assertTrue(cleared_station)
+        self.assertEqual(sim.lights.owner.identifier, second.identifier)
+        self.assertEqual(sim.lights.owner.axis, "EW")
+        self.assertGreater(second.distance, second_stop)
+        self.assertTrue(first.busy)  # Le second n'attend pas le retour complet.
+        north_green = False
         for _ in range(4000):
             self.step_safely(sim)
+            if second.identifier in sim.crossing_owners:
+                self.assertEqual(sim.lights.owner.identifier, second.identifier)
+                self.assertEqual(sim.lights.signal("EW"), "green")
+            north_green |= sim.lights.signal("NS") == "green"
             if all(not rescue.busy for rescue in sim.rescues):
                 break
+        self.assertTrue(north_green)
         self.assertTrue(all(not rescue.busy for rescue in sim.rescues))
 
 

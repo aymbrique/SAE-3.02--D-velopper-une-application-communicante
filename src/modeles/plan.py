@@ -14,7 +14,7 @@ CAR_EDGE_MARGIN = 30  # Faire apparaitre/disparaitre le rectangle hors de la vue
 PARKING_X = 270
 PARKING_Y = {"01": 150, "02": 210}
 DESTINATIONS = {"W": "Mairie", "S": "Restaurant",
-                "N": "IUT de Clermont", "E": "Leclerc"}
+                "N": "IUT de Colmar", "E": "Leclerc"}
 OPPOSITE = {"N": "S", "S": "N", "E": "W", "W": "E"}
 
 # Les noeuds sont les raccordements des routes. C est le seul carrefour a feux.

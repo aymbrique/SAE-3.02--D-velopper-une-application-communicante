@@ -9,6 +9,8 @@ class Request:
     axis: str
     started_at: float
     requested_at: float
+    passage: int | None = 0  # None : degagement de la caserne, sans passage a C.
+    engaged: bool = False
 
 
 class Lights:
@@ -23,6 +25,7 @@ class Lights:
         self.phase = "green"
         self.elapsed = 0.0
         self.owner = None
+        self.owner_locked = False
         self.priority_green = False
         self.debt = {"NS": 0.0, "EW": 0.0}
         self.compensating = False
@@ -60,6 +63,26 @@ class Lights:
     def _priority_order(self, request):
         return (request.started_at, request.requested_at, request.identifier)
 
+    def _select_owner(self, requests):
+        crossings = [request for request in requests if request.passage is not None]
+        current = None
+        if self.owner:
+            current = next((request for request in crossings
+                            if (request.identifier, request.started_at, request.passage)
+                            == (self.owner.identifier, self.owner.started_at, self.owner.passage)), None)
+        if current and (self.owner_locked or current.engaged):
+            self.owner = current
+            self.owner_locked = True
+            return
+        # Un secours deja engage doit terminer, meme si l'autre mission est
+        # plus ancienne. Sinon arbitrer les demandes presentes au seuil.
+        engaged = [request for request in crossings if request.engaged]
+        candidates = engaged or crossings or requests
+        self.owner = min(candidates, key=self._priority_order) if candidates else None
+        # Une demande seule peut preparer le vert. Quand deux demandes se
+        # confrontent, le choix est fixe jusqu'a la fin du passage selectionne.
+        self.owner_locked = bool(engaged or len(crossings) > 1)
+
     def _net_debt(self):
         # Chaque solde appartient a l'axe qui doit recevoir du vert en plus.
         # Deux retards opposes se compensent : seul leur ecart reste du.
@@ -75,13 +98,7 @@ class Lights:
         # clear : aucun vehicule n'est encore engage dans le carrefour.
         self._net_debt()
         previous = self.owner
-        if self.owner:
-            # Garder le meme secours, mais actualiser son axe au prochain passage.
-            self.owner = next((request for request in requests
-                               if request.identifier == self.owner.identifier), None)
-        if self.owner is None and requests:
-            # Plus ancienne mission, puis plus ancienne demande, puis identifiant.
-            self.owner = min(requests, key=self._priority_order)
+        self._select_owner(requests)
         if self.compensating and self.owner is not None:
             # Le bonus non encore servi reste en dette. Le temps deja servi
             # ne devient pas retroactivement une prolongation prioritaire.

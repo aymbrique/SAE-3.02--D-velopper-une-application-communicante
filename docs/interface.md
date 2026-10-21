@@ -7,7 +7,7 @@
 3. **Mettre en pause** fige le temps simule, les vehicules et les feux. La connexion TCP reste active pendant la pause.
 4. **Reprendre** continue depuis le meme etat. La liste de vitesse (x0,5, x1, x2) change le rapport entre temps reel et temps simule.
 5. Le champ **Voitures / minute** accepte 0 a 60. A 0, les voitures deja presentes finissent leurs trajets, sans nouvelles arrivees.
-6. Choisir le **Vehicule** (01 pompiers ou 02 ambulance), puis **Intervention** (Mairie, Restaurant, IUT de Clermont, Leclerc). **Envoyer en intervention** demarre sa mission et envoie immediatement son etat occupe. Un secours deja occupe ne peut ni repartir ni changer de destination. Le second secours reste selectionnable et peut partir pendant la premiere mission.
+6. Choisir le **Vehicule** (01 pompiers ou 02 ambulance), puis **Intervention** (Mairie, Restaurant, IUT de Colmar, Leclerc). **Envoyer en intervention** demarre sa mission et envoie immediatement son etat occupe. Un secours deja occupe ne peut ni repartir ni changer de destination. Le second secours reste selectionnable et peut partir pendant la premiere mission.
 7. **Recommencer** remet le moteur et les compteurs a zero, annule les missions et envoie disponible pour les deux secours. Le debit choisi est conserve. L'historique MariaDB n'est pas efface.
 
 Une mission declenchee pendant la pause devient occupee mais n'avance qu'apres reprise. A l'arrivee au point d'intervention, le secours attend 8 secondes simulees puis revient a la caserne. Il repasse disponible a son retour.
@@ -23,7 +23,7 @@ L'onglet **Reseau** affiche l'adresse, la liaison et le nombre de mises a jour n
 La carte est volontairement simple : fond vert hors des routes, quatre points d'intervention, routes grises, feux ronds, voitures bleues, pompier 01 rouge et ambulance 02 blanche. Les vehicules sont des rectangles.
 
 Les points d'intervention sont associés à quatre bâtiments : mairie à l'ouest
-(point 1), restaurant au sud-ouest (point 2), IUT de Clermont au nord-est
+(point 1), restaurant au sud-ouest (point 2), IUT de Colmar au nord-est
 (point 3) et E.Leclerc à l'est (point 4). Chacun possède un petit parking gris
 accolé au bâtiment et une allée jusqu'à la route. Le rectangle jaune indique
 l'arrêt du secours. Les bâtiments sont dessinés avec les rectangles, polygones
@@ -50,9 +50,17 @@ dans `src/interface/signalisation.py` et utilise seulement les formes de PyQt6.
 
 Les quatre destinations possedent un passage aller et un passage retour au carrefour principal. Le point 3 se trouve au nord-est, sur la route superieure ; le point 2 est au sud-ouest, sur la route du bas. Des que le secours est a 150 m ou moins ou a 10 s d'arrivee ou moins, son feu est demande au vert, a l'aller comme au retour. Si l'autre axe est vert, il passe immediatement a l'orange, puis au tout rouge avant le vert du secours ; les vehicules deja engages finissent de degager. Une sortie occupee impose l'attente avant d'entrer, mais ne supprime plus la demande du vert.
 
-Les demandes de priorite admissibles sont departagees par mission la plus ancienne, puis demande la plus ancienne, puis identifiant. Une priorite attribuee n'est pas interrompue par l'autre secours. Le second ne passe pas avant le premier, meme si le meme axe est vert.
+Une demande seule prépare le vert. Dès que les deux secours atteignent le
+seuil au même carrefour, celui dont l'intervention a commencé le plus tôt
+(donc le temps écoulé le plus grand) obtient la commande des feux. En cas
+d'égalité, la demande la plus ancienne puis l'identifiant départagent.
+Ce choix reste fixé jusqu'à sa sortie du carrefour, puis la demande du
+second est traitée, même en sens opposé sur le même axe. Un secours déjà
+engagé termine toujours son passage. Le passage aller, le passage retour
+et le dégagement de la caserne sont distingués : une simple demande de
+dégagement ne conserve pas la commande au détriment du second secours.
 
-Des l'envoi en intervention, la ligne verticale est demandee au vert pour vider la file entre caserne et feu. Les voitures en amont de la caserne attendent, celles deja devant degagent. Le secours avance dans l'allee pendant cette vidange et s'insere lorsque le passage est libre. Au retour, il conserve la demande verticale apres le feu principal jusqu'au degagement de l'acces caserne, pour qu'une nouvelle file rouge ne l'enferme pas devant son garage.
+Des l'envoi en intervention, la ligne verticale est demandee au vert pour vider la file entre caserne et feu. Les voitures en amont de la caserne attendent, celles deja devant degagent. Le secours avance dans l'allee pendant cette vidange et s'insere lorsque le passage est libre. Au retour, une demande verticale aide a degager l'acces a la caserne apres le feu principal. Elle est servie lorsqu'aucun secours n'attend encore son passage au carrefour.
 
 Les reserves des deux lignes se compensent en permanence : 17 s verticales et 15 s horizontales deviennent 2 s verticales et 0 s horizontales. Le prochain vert normal vertical dure alors 8 + 0,5 s ; il restera 1,5 s a repartir sur les cycles suivants. Une mission eloignee du carrefour n'empeche pas la restitution. Une demande prioritaire interrompt le bonus sans effacer sa partie non servie ; seuls les bonus effectivement ecoules diminuent le solde. Les petits residus sont soldes avec un dernier bonus d'au plus 0,05 s. Mettre en pause fige les compteurs ; Recommencer les remet a zero.
 
