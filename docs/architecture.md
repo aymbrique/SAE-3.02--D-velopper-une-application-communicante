@@ -52,6 +52,16 @@ libre sans attendre la libération de tout le carrefour. Chaque déplacement
 reste contrôlé. Aux raccordements, les trajets qui se coupent gardent une
 réservation jusqu'au dernier conflit géométrique.
 
+Un secours qui tourne laisse terminer la réinsertion d'une voiture déjà engagée
+si sa courbe lui coupe la route. Il entre dès que le dernier conflit est dégagé,
+même si cette voiture n'a pas encore quitté tout le carrefour.
+
+À la caserne, un départ et un retour peuvent partager l'allée lorsque leurs
+carrosseries restent séparées. Si le véhicule sortant barre la fin du retour,
+il dégage d'abord l'accès ; les deux secours ne s'attendent plus mutuellement.
+Le véhicule entrant attend toujours si le départ est réellement immobilisé
+sur son trajet.
+
 Une voiture rangée en sortie continue à dégager la file si des véhicules sont
 encore engagés derrière elle, au carrefour ou dans un accès de secours. Cela
 permet de finir la traversée et de quitter le tout rouge sans ouvrir un axe

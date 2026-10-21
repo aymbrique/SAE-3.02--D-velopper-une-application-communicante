@@ -5,6 +5,7 @@ from math import hypot
 import unittest
 
 from src.simulation.moteur import GAP, STEP, Simulation
+from src.simulation.priorite import PULL_OVER
 from traffic_checks import assert_spacing
 
 
@@ -180,6 +181,34 @@ class TrafficFlowTests(unittest.TestCase):
             sim.advance(STEP)
             self.assert_gaps(sim)
         self.assert_gaps(sim)
+
+    def test_rescue_turn_does_not_cut_off_car_rejoining_in_crossing(self):
+        sim = Simulation(rate=0)
+        car = sim.spawn("N", "straight")
+        car.distance = car.crossing[0] + 64.8
+        car.manoeuvre_start = car.distance - 14.4
+        car.manoeuvre_from = PULL_OVER
+        car.manoeuvre_target = 0
+        car.lateral_offset, _ = car.roadside_offset(car.distance)
+        sim.crossing_owners.add(car.identifier)
+        sim.start_mission("01", "W")
+        rescue = sim.get_rescue("01")
+        stop = rescue.crossing[0]
+        rescue.distance = stop
+        previous = car.distance
+        sim.advance(.5)
+        self.assertEqual(rescue.distance, stop)
+        self.assertGreater(car.distance, previous)
+        entered = False
+        for _ in range(150):
+            sim.advance(STEP)
+            self.assert_gaps(sim)
+            if not entered and rescue.distance > stop:
+                entered = True
+                self.assertIn(car.identifier, sim.crossing_owners)
+        self.assertTrue(entered)
+        self.assertFalse(sim.crossing_owners)
+        self.assertEqual(car.lateral_offset, 0)
 
     def test_rescue_waits_at_occupied_secondary_junction_then_continues(self):
         sim = Simulation(rate=0)

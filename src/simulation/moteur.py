@@ -36,6 +36,7 @@ class Simulation:
         self.lights = Lights()
         self.crossing_owners = set()
         self.junction_conflicts = {}
+        self.crossing_conflicts = {}
         self.clearing_accesses = set()
         self.cars = []
         self.rescues = []
@@ -225,12 +226,23 @@ class Simulation:
     def _position(self, vehicle, distance, offset=None):
         return vehicle.position_at(distance, offset)
 
+    def _opposite_station_moves(self, first, second):
+        """Un retour et un depart utilisent deux voies distinctes dans l'allee."""
+        if (first.kind == "car" or second.kind == "car"
+                or not first.busy or not second.busy or first.visited == second.visited):
+            return False
+        return all(any(key == "parking" and stop <= vehicle.distance < end
+                       for stop, end, key in vehicle.route.junctions)
+                   for vehicle in (first, second))
+
     def pair_clear(self, first, second, position=None, other_position=None):
         position = first.position if position is None else position
         other_position = second.position if other_position is None else other_position
         distance = hypot(position[0] - other_position[0], position[1] - other_position[1])
         if distance >= GAP - 1e-7:
             return True
+        if self._opposite_station_moves(first, second):
+            return bodies_clear(first, position, second, other_position)
         if abs(first.lateral_offset) > 1e-6 or abs(second.lateral_offset) > 1e-6:
             return bodies_clear(first, position, second, other_position)
         # Apres une reinsertion, un ecart deja court ne doit pas emprisonner
@@ -463,6 +475,9 @@ class Simulation:
             if other.identifier in self.crossing_owners and other is not vehicle:
                 if not self.can_share_crossing(vehicle, other):
                     return False
+                if (vehicle.kind != "car" and other.kind == "car"
+                        and self._crossing_conflict_ahead(vehicle, other)):
+                    return False
                 if vehicle.lateral_offset > 0 or other.lateral_offset > 0:
                     point = self._position(vehicle, vehicle.distance + vehicle.speed * STEP)
                     ox, oy, _ = other.position
@@ -496,6 +511,32 @@ class Simulation:
             if not self._clear_path(vehicle, stop + offset, following):
                 return False
         return True
+
+    def _crossing_conflict_ahead(self, rescue, car):
+        """Ne pas couper la manoeuvre d'une voiture deja engagee au carrefour."""
+        stop, end, _ = rescue.crossing
+        car_stop, car_end, _ = car.crossing
+        incoming, outgoing = rescue.route.sample(stop), rescue.route.sample(end)
+        car_incoming, car_outgoing = car.route.sample(car_stop), car.route.sample(car_end)
+        if all(hypot(first[0] - second[0], first[1] - second[1]) < 1
+               and cos(radians(first[2] - second[2])) > .999
+               for first, second in ((incoming, car_incoming), (outgoing, car_outgoing))):
+            return False  # Le suivi dans la meme voie reste possible, a distance.
+        manoeuvre = ((car.manoeuvre_start - car_stop, car.manoeuvre_from,
+                      car.manoeuvre_target, car.manoeuvre_length)
+                     if car.manoeuvre_start is not None else (None, car.lateral_offset))
+        key = (incoming, outgoing, car_incoming, car_outgoing, manoeuvre)
+        if key not in self.crossing_conflicts:
+            path = [rescue.position_at(stop + offset)
+                    for offset in range(0, int(end - stop) + 45, 3)]
+            last = -inf
+            for offset in range(0, int(car_end - car_stop) + 45, 3):
+                position = car.position_at(car_stop + offset)
+                if any(hypot(position[0] - point[0], position[1] - point[1]) < GAP
+                       and not bodies_clear(rescue, point, car, position) for point in path):
+                    last = offset + 3
+            self.crossing_conflicts[key] = last
+        return car.distance - car_stop <= self.crossing_conflicts[key]
 
     def _move(self, vehicle):
         vehicle.current_speed = 0.0
@@ -627,6 +668,10 @@ class Simulation:
                 elif self._following_exit(vehicle, end, other, other_end):
                     following.add(other.identifier)
                 elif other_stop < other.distance < other_end:
+                    if key == "parking" and self._opposite_station_moves(vehicle, other):
+                        # Le secours sortant peut attendre a F sans retenir toute
+                        # l'allee du retour. Le balayage controle les gabarits.
+                        continue
                     if self._junction_still_conflicts(
                             vehicle, stop, end, key, other, other_stop, other_end):
                         return False
@@ -696,6 +741,21 @@ class Simulation:
                     break
         if not candidates:
             return None
+        if key == "F":
+            for outgoing, outgoing_stop in candidates:
+                if not self._leaving_station(outgoing):
+                    continue
+                for returning, returning_stop in candidates:
+                    if (returning is outgoing or not self._returning_station(returning)
+                            or returning.distance > returning_stop):
+                        continue
+                    # Un depart deja dans l'allee peut barrer la fin du retour.
+                    # Le laisser sortir evite que chacun attende l'autre a F.
+                    parking_end = returning.route.length
+                    if any(not bodies_clear(returning, returning.position_at(distance),
+                                            outgoing, outgoing.position)
+                           for distance in range(int(returning_stop), int(parking_end) + 1, 6)):
+                        return outgoing, outgoing_stop
         return min(candidates, key=lambda item: (item[0].started_at, item[0].identifier))
 
     def _blocks_approach(self, vehicle, rescue, stop):

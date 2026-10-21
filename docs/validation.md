@@ -16,6 +16,9 @@ python -m unittest discover -s tests -v
 - Secours plus rapides et passage au vert sans réservation inutile de tout le carrefour.
 - Absence de contact entre les rectangles orientés, vérifiée avec les polygones Qt.
 - Départ dans une file de onze voitures au nord et retour à la caserne.
+- Retour et nouveau départ simultanés à la caserne, avec des voitures en manœuvre.
+- Attente devant un secours immobilisé qui barre réellement l'accès à la caserne.
+- Virage d'un secours après une réinsertion au carrefour, sans attente jusqu'à la sortie complète.
 - Deux secours simultanés et les seize couples de destinations à 40 voitures/minute.
 - Dix minutes à 60 voitures/minute, six interventions successives, graines 51 et 302.
 - Retour des missions, progression du trafic et durée limitée du tout rouge dans ces scénarios.
@@ -45,8 +48,9 @@ les tables ni le protocole TCP. Les essais SQL ne sont pas rejoués pour cette m
 3. Augmenter le trafic, puis envoyer un secours : les voitures proches se rangent.
 4. Vérifier qu'elles avancent en biais pour se ranger, s'arrêtent, puis reprennent sans se doubler.
 5. Envoyer le second secours et essayer les quatre destinations.
-6. Observer une voiture qui tourne : une suivante de la même approche peut entrer en ralentissant.
-7. Vérifier pause, reprise, vitesse et Recommencer.
+6. À 60 voitures/minute, envoyer l'ambulance à l'ouest, puis le camion lorsqu'elle revient près de la caserne : les deux missions doivent se terminer.
+7. Observer une voiture qui tourne : une suivante de la même approche peut entrer en ralentissant.
+8. Vérifier pause, reprise, vitesse et Recommencer.
 
 Sur Debian, vérifier aussi le centre, MariaDB et la communication selon
 le guide de déploiement. Un essai local ne remplace pas la vérification sur la VM.

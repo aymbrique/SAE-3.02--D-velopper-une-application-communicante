@@ -7,9 +7,91 @@ from traffic_checks import assert_spacing
 
 from src.simulation.moteur import GAP, STEP, Simulation
 from src.simulation.feux import Request
+from src.simulation.priorite import PULL_OVER
 
 
 class StationDispatchTests(unittest.TestCase):
+    def return_meets_departure(self, returning_id="02"):
+        sim = Simulation(rate=0)
+        sim.start_mission(returning_id, "W")
+        returning = sim.get_rescue(returning_id)
+        returning.visited = True
+        returning.crossing_index = 2
+        returning.distance = [stop for stop, _, key in returning.route.junctions if key == "F"][-1]
+        sim.time = 10
+        outgoing_id = "01" if returning_id == "02" else "02"
+        sim.start_mission(outgoing_id, "W")
+        outgoing = sim.get_rescue(outgoing_id)
+        outgoing.distance = next(stop for stop, _, key in outgoing.route.junctions if key == "F")
+        cars = []
+        for index, y in enumerate((296, 340, 384)):
+            car = sim.spawn("S", "straight")
+            exit_distance = car.crossings[0][1]
+            car.distance = exit_distance + car.route.sample(exit_distance)[1] - y
+            car.crossing_index = 1
+            if index == 0:
+                car.lateral_offset = PULL_OVER
+                car.yielding_to = (returning_id,)
+            else:
+                car.manoeuvre_start = car.distance - 36 + 12 * index
+                car.manoeuvre_target = PULL_OVER
+                car.lateral_offset, _ = car.roadside_offset(car.distance)
+            cars.append(car)
+        return sim, returning, outgoing, cars
+
+    def test_return_and_departure_release_station_with_cars_manoeuvring(self):
+        for identifier in ("01", "02"):
+            with self.subTest(returning=identifier):
+                sim, returning, outgoing, cars = self.return_meets_departure(identifier)
+                started = sim.time
+                returned_at = None
+                for _ in range(1600):
+                    self.step_safely(sim)
+                    for leader, follower in zip(cars, cars[1:]):
+                        if leader in sim.cars and follower in sim.cars:
+                            self.assertGreaterEqual(leader.distance - follower.distance, GAP - 1e-6)
+                    if not returning.busy and returned_at is None:
+                        returned_at = sim.time
+                    if all(not rescue.busy for rescue in sim.rescues):
+                        break
+                self.assertIsNotNone(returned_at)
+                self.assertLess(returned_at - started, 15)
+                self.assertFalse(outgoing.busy)
+                self.assertTrue(all(car.lateral_offset == 0 for car in cars))
+
+    def test_return_does_not_cross_departure_that_cannot_move(self):
+        sim, returning, outgoing, _ = self.return_meets_departure()
+        outgoing.speed = 0
+        stop = returning.distance
+        for _ in range(100):
+            self.step_safely(sim)
+        self.assertEqual(returning.distance, stop)
+        self.assertTrue(returning.waiting)
+        outgoing.speed = 56
+        for _ in range(400):
+            self.step_safely(sim)
+            if not returning.busy:
+                break
+        self.assertFalse(returning.busy)
+
+    def test_new_mission_while_other_rescue_returns_with_dense_traffic(self):
+        sim = Simulation(rate=60, seed=302)
+        sim.advance(30)
+        sim.start_mission("02", "W")
+        returning = sim.get_rescue("02")
+        station_stop = [stop for stop, _, key in returning.route.junctions if key == "F"][-1]
+        launched = False
+        for _ in range(3600):
+            if (returning.visited and returning.distance >= station_stop - 250
+                    and not launched):
+                self.assertTrue(sim.start_mission("01", "W"))
+                launched = True
+            self.step_safely(sim)
+            if launched and all(not rescue.busy for rescue in sim.rescues):
+                break
+        self.assertTrue(launched)
+        self.assertTrue(all(not rescue.busy for rescue in sim.rescues))
+
     def queued_north(self):
         sim = Simulation(rate=0)
         sim.lights.axis = "EW"
