@@ -1,6 +1,6 @@
 # Ancien guide : lancement optionnel sur deux VM Linux
 
-**Le deploiement retenu utilise maintenant une seule VM. Suivre [le nouveau guide](deploiement-une-vm.md).** Cette variante a deux machines est conservee pour reference.
+**Le deploiement demande utilise deux VM. Suivre [le guide principal](deploiement-une-vm.md).** Cette page conserve des explications reseau complementaires.
 
 ## 1. Repartition
 
