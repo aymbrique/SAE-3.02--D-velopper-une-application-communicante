@@ -20,15 +20,18 @@ class InterfaceTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_controls_pause_speed_and_routes(self):
+    def test_controls_rate_limit_pause_speed_and_reset(self):
         window = MainWindow()
         self.addCleanup(window.close)
         window.show()
         self.app.processEvents()
-        window.rate_input.setValue(30)
-        self.assertEqual(window.scenario.rate, 30)
-        window.speed_input.setCurrentIndex(2)
+        self.assertEqual(window.speed_input.currentText(), "x1")
         self.assertEqual(window.speed, 2)
+        window.rate_input.setValue(30)
+        self.assertEqual(window.rate_input.value(), 25)
+        self.assertEqual(window.scenario.rate, 25)
+        window.speed_input.setCurrentIndex(2)
+        self.assertEqual(window.speed, 3)
         window.play_button.click()
         QTest.qWait(200)
         self.assertGreater(window.elapsed, 0)
@@ -36,16 +39,10 @@ class InterfaceTests(unittest.TestCase):
         paused = window.elapsed
         QTest.qWait(80)
         self.assertEqual(window.elapsed, paused)
-        window.route_checkbox.setChecked(True)
-        for index in range(window.route_combo.count()):
-            window.route_combo.setCurrentIndex(index)
-            self.assertIsNotNone(window.view.route_item)
-        window.route_checkbox.setChecked(False)
-        self.assertIsNone(window.view.route_item)
         window.reset_button.click()
         self.assertEqual(window.elapsed, 0)
         self.assertFalse(window.playing)
-        self.assertEqual(window.scenario.rate, 30)
+        self.assertEqual(window.scenario.rate, 25)
 
     def test_horizontal_and_vertical_accumulation_counters(self):
         window = MainWindow()
@@ -66,20 +63,18 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(window.accumulation_labels["EW"].text(), "0.0 s stockees")
         self.assertEqual(window.accumulation_labels["NS"].text(), "0.0 s stockees")
 
-    def test_new_cars_start_outside_view_after_resize_and_zoom(self):
+    def test_new_cars_start_outside_view_after_resize(self):
         window = MainWindow()
         self.addCleanup(window.close)
         window.timer.stop()
         window.show()
         window.playing = True
-        for width, height, zoom in ((960, 680, 1), (1600, 680, 1), (1100, 720, 2)):
+        for width, height in ((960, 680), (1600, 680), (1100, 720)):
             window.resize(width, height)
             self.app.processEvents()
-            window.view.zoom_factor = zoom
-            window.view.fit_scene()
             window._tick()
             for origin in "NSEW":
-                with self.subTest(size=(width, height), zoom=zoom, origin=origin):
+                with self.subTest(size=(width, height), origin=origin):
                     window.scenario.cars.clear()
                     car = window.scenario.spawn(origin, "straight")
                     point = window.view.mapFromScene(QPointF(*car.position[:2]))

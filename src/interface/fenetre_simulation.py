@@ -3,12 +3,12 @@
 from math import ceil
 from PyQt6.QtCore import QElapsedTimer, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QMainWindow,
+    QComboBox, QFormLayout, QHBoxLayout, QLabel, QMainWindow,
     QProgressBar, QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from src.interface.carte import MapView
-from src.modeles.plan import DESTINATIONS, car_route, rescue_route
+from src.modeles.plan import DESTINATIONS
 from src.simulation.moteur import Simulation
 
 
@@ -21,7 +21,7 @@ class MainWindow(QMainWindow):
         self.client = client
         self.elapsed = 0.0
         self.playing = False
-        self.speed = 1.0
+        self.speed = 2.0
         self._build_ui()
 
         # Qt appelle _tick regulierement. Le moteur calcule les deplacements.
@@ -50,9 +50,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_network_tab(), "Reseau")
         body.addWidget(tabs)
         layout.addLayout(body, 1)
-        self._build_routes(layout)
         layout.addWidget(QLabel("Voiture : bleu | Pompier 01 : rouge | Ambulance 02 : blanc"))
-        layout.addWidget(QLabel("Zoom : molette | Deplacement : glisser | Details : survol du vehicule"))
         self.footer = QLabel()
         layout.addWidget(self.footer)
 
@@ -66,14 +64,14 @@ class MainWindow(QMainWindow):
         row.addWidget(self.reset_button)
         row.addWidget(QLabel("Vitesse"))
         self.speed_input = QComboBox()
-        for speed in (0.5, 1, 2):
-            self.speed_input.addItem(f"x{speed:g}", speed)
+        for label, speed in (("x0.5", 0.5), ("x1", 2.0), ("x2", 3.0)):
+            self.speed_input.addItem(label, speed)
         self.speed_input.setCurrentIndex(1)
         self.speed_input.currentIndexChanged.connect(self._change_speed)
         row.addWidget(self.speed_input)
         row.addWidget(QLabel("Voitures / minute"))
         self.rate_input = QSpinBox()
-        self.rate_input.setRange(0, 60)
+        self.rate_input.setRange(0, 25)
         self.rate_input.setValue(self.scenario.rate)
         self.rate_input.valueChanged.connect(self._change_rate)
         row.addWidget(self.rate_input)
@@ -161,36 +159,6 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         return page
 
-    def _build_routes(self, layout):
-        row = QHBoxLayout()
-        self.route_checkbox = QCheckBox("Afficher un trajet")
-        self.route_checkbox.toggled.connect(self._update_route)
-        row.addWidget(self.route_checkbox)
-        self.route_combo = QComboBox()
-        for rescue in self.scenario.rescues:
-            for side in DESTINATIONS:
-                route, crossings, hospital = rescue_route(rescue.identifier, rescue.route.points[0][1], side)
-                self.route_combo.addItem(route.name, route)
-        for origin in ("N", "S", "E", "W"):
-            for turn in ("straight", "left", "right"):
-                route, stop = car_route(origin, turn)
-                self.route_combo.addItem(route.name, route)
-                if (origin, turn) in (("N", "straight"), ("E", "left"), ("W", "right")):
-                    variant = "lower_west"
-                elif (origin, turn) in (("W", "straight"), ("N", "left"), ("S", "right")):
-                    variant = "middle_north"
-                else:
-                    continue
-                route, stop = car_route(origin, turn, variant=variant)
-                self.route_combo.addItem(route.name, route)
-        self.route_combo.setEnabled(False)
-        self.route_combo.currentIndexChanged.connect(self._update_route)
-        row.addWidget(self.route_combo, 1)
-        fit_button = QPushButton("Vue complete")
-        fit_button.clicked.connect(self._fit_map)
-        row.addWidget(fit_button)
-        layout.addLayout(row)
-
     def _send_selected(self):
         self.start_mission(self.rescue_combo.currentData(), self.destination_combo.currentData())
 
@@ -203,9 +171,6 @@ class MainWindow(QMainWindow):
             self.send_button.setText("Ce secours est deja en mission")
         else:
             self.send_button.setText("Envoyer en intervention")
-
-    def _fit_map(self):
-        self.view.fit_scene(reset_zoom=True)
 
     def _change_speed(self):
         self.set_speed(self.speed_input.currentData())
@@ -243,11 +208,7 @@ class MainWindow(QMainWindow):
         self.refresh()
 
     def start_mission(self, identifier, destination="S"):
-        started = self.scenario.start_mission(identifier, destination)
-        if started:
-            # Le trajet affiche correspond a la mission qui vient d'etre envoyee.
-            name = self.scenario.get_rescue(identifier).route.name
-            self.route_combo.setCurrentIndex(self.route_combo.findText(name))
+        self.scenario.start_mission(identifier, destination)
         self._publish_events()
         self.refresh()
 
@@ -256,17 +217,9 @@ class MainWindow(QMainWindow):
             if self.client:
                 self.client.publish(identifier, state)
 
-    def _update_route(self):
-        enabled = self.route_checkbox.isChecked()
-        self.route_combo.setEnabled(enabled)
-        if enabled:
-            self.view.set_route(self.route_combo.currentData())
-        else:
-            self.view.set_route(None)
-
     def refresh(self):
         frame = self.scenario.frame()
-        self.view.sync(frame, self.elapsed)
+        self.view.sync(frame)
         seconds = int(self.elapsed)
         self.clock_label.setText(f"{seconds // 60:02d}:{seconds % 60:02d}")
         self.car_count.setText(str(len(frame.cars)))

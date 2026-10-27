@@ -5,8 +5,8 @@
 1. Lancer la simulation selon le [guide Linux](deploiement-une-vm.md).
 2. Cliquer sur **Demarrer**. Les voitures apparaissent progressivement ; le debit initial est de 12 voitures par minute simulee.
 3. **Mettre en pause** fige le temps simule, les vehicules et les feux. La connexion TCP reste active pendant la pause.
-4. **Reprendre** continue depuis le meme etat. La liste de vitesse (x0,5, x1, x2) change le rapport entre temps reel et temps simule.
-5. Le champ **Voitures / minute** accepte 0 a 60. A 0, les voitures deja presentes finissent leurs trajets, sans nouvelles arrivees.
+4. **Reprendre** continue depuis le meme etat. Le mode x1 correspond maintenant a l'ancien x2 (2 secondes simulees par seconde reelle) ; le mode x2 correspond a 3 secondes simulees par seconde reelle. Le mode lent x0,5 conserve son allure precedente.
+5. Le champ **Voitures / minute** accepte 0 a 25 voitures par minute simulee. A 0, les voitures deja presentes finissent leurs trajets, sans nouvelles arrivees.
 6. Choisir le **Vehicule** (01 pompiers ou 02 ambulance), puis **Intervention** (Mairie, Restaurant, IUT de Colmar, Leclerc). **Envoyer en intervention** demarre sa mission et envoie immediatement son etat occupe. Un secours deja occupe ne peut ni repartir ni changer de destination. Le second secours reste selectionnable et peut partir pendant la premiere mission.
 7. **Recommencer** remet le moteur et les compteurs a zero, annule les missions et envoie disponible pour les deux secours. Le debit choisi est conserve. L'historique MariaDB n'est pas efface.
 
@@ -31,7 +31,7 @@ et textes de PyQt6 dans `src/interface/batiments.py`, sans image importée.
 
 Les voitures arrivent depuis l'exterieur des extremites visibles des routes, y compris les marges dues au format de la fenetre. Elles ne sont pas inserees au milieu d'une voie. La moitie des tirages d'arrivee vient du Nord ; les trois autres origines se partagent l'autre moitie. Une entree occupee peut retarder l'apparition.
 
-Molette : zoom. Glisser : deplacement. **Vue complete** : retour au cadrage initial. **Afficher un trajet** : choix parmi les huit parcours de secours (deux vehicules et quatre destinations) et les dix-huit trajets de voiture (douze de base et six variantes). Survoler un vehicule affiche son identifiant et sa situation.
+La carte reste cadree automatiquement sur le plan entier, y compris au redimensionnement de la fenetre. Le zoom, le deplacement manuel, les details au survol et le choix d'un trajet a afficher ont ete retires. Les informations des secours restent accessibles dans l'onglet **Secours**.
 
 Les voitures s'arretent au rouge et a l'orange devant le vrai feu. Au vert, les files suivant le meme mouvement, y compris le meme virage, et les mouvements opposes tout droit/a droite peuvent passer ensemble. Les trajectoires qui se croisent attendent ; une sortie reellement bouchee impose l'attente. Les courbes sont parcourues plus vite pour liberer le passage. Une voiture deja engagee finit son passage. L'autre axe n'est ouvert qu'apres degagement et les transitions de securite.
 

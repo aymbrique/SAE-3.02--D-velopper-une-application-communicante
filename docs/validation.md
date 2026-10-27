@@ -33,7 +33,7 @@ python -m unittest discover -s tests -v
 - Retour des missions, progression du trafic et durée limitée du tout rouge dans ces scénarios.
 - Arrivée à un point d'intervention ou en fin de trajet à une erreur flottante près.
 - Annulation des réserves opposées et restitution par quarts aux prochains verts.
-- Boutons, minuteur, affichage des trajets et échanges TCP réels sur l'ordinateur.
+- Boutons, limite de 25 voitures/minute dans l'interface, vitesses, minuteur et échanges TCP réels sur l'ordinateur.
 
 Les régressions se trouvent dans `tests/test_rangement.py` et
 `tests/test_priorite_fluide.py`.
@@ -59,7 +59,7 @@ les tables ni le protocole TCP. Les essais SQL ne sont pas rejoués pour cette m
 3. Augmenter le trafic, puis envoyer un secours : les voitures proches se rangent.
 4. Vérifier qu'elles avancent en biais pour se ranger, s'arrêtent, puis reprennent sans se doubler.
 5. Envoyer le second secours et essayer les quatre destinations.
-6. À 60 voitures/minute, envoyer l'ambulance à l'ouest, puis le camion lorsqu'elle revient près de la caserne : les deux missions doivent se terminer.
+6. À 25 voitures/minute, envoyer l'ambulance à l'ouest, puis le camion lorsqu'elle revient près de la caserne : les deux missions doivent se terminer.
 7. Observer une voiture qui tourne : une suivante de la même approche peut entrer en ralentissant.
 8. Vérifier pause, reprise, vitesse et Recommencer.
 
