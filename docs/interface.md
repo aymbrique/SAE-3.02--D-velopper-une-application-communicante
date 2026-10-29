@@ -2,7 +2,7 @@
 
 ## Simulation : main.py
 
-1. Lancer la simulation selon le [guide Linux](deploiement-une-vm.md).
+1. Lancer la simulation selon le [guide Linux](deploiement-projet.md).
 2. Cliquer sur **Demarrer**. Les voitures apparaissent progressivement ; le debit initial est de 12 voitures par minute simulee.
 3. **Mettre en pause** fige le temps simule, les vehicules et les feux. La connexion TCP reste active pendant la pause.
 4. **Reprendre** continue depuis le meme etat. Le mode x1 correspond maintenant a l'ancien x2 (2 secondes simulees par seconde reelle) ; le mode x2 correspond a 3 secondes simulees par seconde reelle. Le mode lent x0,5 conserve son allure precedente.

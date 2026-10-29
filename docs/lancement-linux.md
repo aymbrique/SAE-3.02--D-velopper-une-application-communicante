@@ -1,6 +1,6 @@
 # Ancien guide : lancement optionnel sur deux VM Linux
 
-**Le deploiement demande utilise deux VM. Suivre [le guide principal](deploiement-une-vm.md).** Cette page conserve des explications reseau complementaires.
+**Le deploiement demande utilise deux VM. Suivre [le guide principal](deploiement-projet.md).** Cette page conserve des explications reseau complementaires.
 
 ## 1. Repartition
 

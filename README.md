@@ -45,7 +45,7 @@ Cliquer sur **Démarrer**, choisir le secours et sa destination, puis sur
 **Envoyer en intervention**. Le débit et la vitesse se règlent en haut.
 
 Pour installer le projet sur Debian et utiliser le centre avec MariaDB :
-[guide pour une VM](docs/deploiement-une-vm.md).
+[guide pour une VM](docs/deploiement-projet.md).
 
 ## Circulation
 
