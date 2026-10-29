@@ -6,104 +6,104 @@ from threading import Event, Lock, Thread
 from time import monotonic
 from uuid import uuid4
 
-from src.reseau.protocole import Decoder, encode
+from src.reseau.protocole import Decodeur, encoder
 
 
-class StateClient:
-    def __init__(self, host="127.0.0.1", port=5000):
-        self.host = host
+class ClientEtats:
+    def __init__(self, hote="127.0.0.1", port=5000):
+        self.hote = hote
         self.port = port
         self.session = str(uuid4())
-        self.numbers = {"01": 0, "02": 0}
-        self.pending = deque()  # File : premier message ajoute, premier envoye.
-        self.latest = {}
-        self.lock = Lock()  # Protege les donnees partagees avec la fenetre.
-        self.stop_event = Event()
-        self.thread = None
-        self.socket = None
-        self.status = "Liaison interrompue"
+        self.numeros = {"01": 0, "02": 0}
+        self.en_attente_envoi = deque()  # File : premier message ajoute, premier envoye.
+        self.derniers_etats = {}
+        self.verrou = Lock()  # Protege les donnees partagees avec la fenetre.
+        self.arret_demande = Event()
+        self.thread_reseau = None
+        self.connexion = None
+        self.statut = "Liaison interrompue"
 
-    def publish(self, identifier, state):
-        with self.lock:
-            self.numbers[identifier] += 1
-            message = {"type": "etat", "session": self.session, "id": identifier,
-                       "etat": state, "numero": self.numbers[identifier]}
-            self.pending.append(message)
-            self.latest[identifier] = message
+    def publier(self, identifiant, etat):
+        with self.verrou:
+            self.numeros[identifiant] += 1
+            message = {"type": "etat", "session": self.session, "id": identifiant,
+                       "etat": etat, "numero": self.numeros[identifiant]}
+            self.en_attente_envoi.append(message)
+            self.derniers_etats[identifiant] = message
 
-    def snapshot(self):
-        with self.lock:
-            return self.status, len(self.pending)
+    def instantane(self):
+        with self.verrou:
+            return self.statut, len(self.en_attente_envoi)
 
-    def _status(self, value):
-        with self.lock:
-            self.status = value
+    def _modifier_statut(self, valeur):
+        with self.verrou:
+            self.statut = valeur
 
-    def start(self):
+    def demarrer(self):
         # Le thread execute le reseau en parallele pour ne pas figer les boutons.
-        self.thread = Thread(target=self._run, name="client-tcp", daemon=True)
-        self.thread.start()
+        self.thread_reseau = Thread(target=self._executer, name="client-tcp", daemon=True)
+        self.thread_reseau.start()
 
-    def close(self):
-        self.stop_event.set()
-        if self.socket:
+    def fermer(self):
+        self.arret_demande.set()
+        if self.connexion:
             try:
-                self.socket.shutdown(socket.SHUT_RDWR)
+                self.connexion.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
-        if self.thread:
-            self.thread.join(timeout=4)
+        if self.thread_reseau:
+            self.thread_reseau.join(timeout=4)
 
-    def _exchange(self, sock, message, decoder):
-        sock.sendall(encode(message))
-        deadline = monotonic() + 5
-        while not self.stop_event.is_set() and monotonic() < deadline:
+    def _echanger(self, canal, message, decodeur):
+        canal.sendall(encoder(message))
+        echeance = monotonic() + 5
+        while not self.arret_demande.is_set() and monotonic() < echeance:
             try:
-                data = sock.recv(4096)
+                donnees = canal.recv(4096)
             except socket.timeout:
                 continue
-            if not data:
+            if not donnees:
                 raise ConnectionError("Connexion fermee")
-            for reply in decoder.feed(data):
-                if message["type"] == "ping" and reply.get("type") == "pong":
+            for reponse in decodeur.alimenter(donnees):
+                if message["type"] == "ping" and reponse.get("type") == "pong":
                     return
-                if (reply.get("type") == "ack" and reply.get("session") == message.get("session")
-                        and reply.get("id") == message.get("id") and reply.get("numero") == message.get("numero")):
+                if (reponse.get("type") == "ack" and reponse.get("session") == message.get("session")
+                        and reponse.get("id") == message.get("id") and reponse.get("numero") == message.get("numero")):
                     return
                 raise ConnectionError("Reponse inattendue du centre")
         raise TimeoutError("Centre sans reponse")
 
-    def _run(self):
-        while not self.stop_event.is_set():
+    def _executer(self):
+        while not self.arret_demande.is_set():
             try:
-                with socket.create_connection((self.host, self.port), timeout=1) as sock:
-                    self.socket = sock
-                    sock.settimeout(0.5)
-                    decoder = Decoder()
-                    next_ping = 0
-                    with self.lock:
+                with socket.create_connection((self.hote, self.port), timeout=1) as canal:
+                    self.connexion = canal
+                    canal.settimeout(0.5)
+                    decodeur = Decodeur()
+                    prochain_ping = 0
+                    with self.verrou:
                         # Renvoie l'etat courant apres redemarrage du centre, sans creer de doublon SQL.
-                        for message in self.latest.values():
-                            if message not in self.pending:
-                                self.pending.append(message)
-                    while not self.stop_event.is_set():
-                        with self.lock:
+                        for message in self.derniers_etats.values():
+                            if message not in self.en_attente_envoi:
+                                self.en_attente_envoi.append(message)
+                    while not self.arret_demande.is_set():
+                        with self.verrou:
                             message = None
-                            if self.pending:
-                                message = self.pending[0]
+                            if self.en_attente_envoi:
+                                message = self.en_attente_envoi[0]
                         if message:
-                            self._exchange(sock, message, decoder)
-                            with self.lock:
-                                self.pending.popleft()
-                            self._status("Connecte au centre")
-                        elif monotonic() >= next_ping:
-                            self._exchange(sock, {"type": "ping"}, decoder)
-                            self._status("Connecte au centre")
-                            next_ping = monotonic() + 1
+                            self._echanger(canal, message, decodeur)
+                            with self.verrou:
+                                self.en_attente_envoi.popleft()
+                            self._modifier_statut("Connecte au centre")
+                        elif monotonic() >= prochain_ping:
+                            self._echanger(canal, {"type": "ping"}, decodeur)
+                            self._modifier_statut("Connecte au centre")
+                            prochain_ping = monotonic() + 1
                         else:
-                            self.stop_event.wait(0.05)
+                            self.arret_demande.wait(0.05)
             except (OSError, ValueError):
-                self._status("Liaison interrompue - reconnexion")
-                self.stop_event.wait(1)
+                self._modifier_statut("Liaison interrompue - reconnexion")
+                self.arret_demande.wait(1)
             finally:
-                self.socket = None
+                self.connexion = None

@@ -7,285 +7,285 @@ from PyQt6.QtWidgets import (
     QProgressBar, QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from src.interface.carte import MapView
+from src.interface.carte import VueCarte
 from src.modeles.plan import DESTINATIONS
 from src.simulation.moteur import Simulation
 
 
-class MainWindow(QMainWindow):
+class FenetreSimulation(QMainWindow):
     def __init__(self, client=None):
         super().__init__()
         self.setWindowTitle("SAE302 - Simulation")
         self.resize(1100, 720)
         self.scenario = Simulation()
         self.client = client
-        self.elapsed = 0.0
-        self.playing = False
-        self.speed = 2.0
-        self._build_ui()
+        self.temps_ecoule = 0.0
+        self.en_cours = False
+        self.vitesse = 2.0
+        self._construire_interface()
 
-        # Qt appelle _tick regulierement. Le moteur calcule les deplacements.
-        self.clock = QElapsedTimer()
-        self.clock.start()
-        self.timer = QTimer(self)
-        self.timer.setInterval(30)
-        self.timer.timeout.connect(self._tick)
-        self.timer.start()
-        self.refresh()
+        # Qt appelle _actualiser_simulation regulierement. Le moteur calcule les deplacements.
+        self.horloge = QElapsedTimer()
+        self.horloge.start()
+        self.minuteur = QTimer(self)
+        self.minuteur.setInterval(30)
+        self.minuteur.timeout.connect(self._actualiser_simulation)
+        self.minuteur.start()
+        self.actualiser()
 
-    def _build_ui(self):
+    def _construire_interface(self):
         page = QWidget()
         self.setCentralWidget(page)
-        layout = QVBoxLayout(page)
-        self._build_controls(layout)
+        disposition = QVBoxLayout(page)
+        self._construire_commandes(disposition)
 
-        body = QHBoxLayout()
-        self.view = MapView()
-        body.addWidget(self.view, 1)
-        tabs = QTabWidget()
-        tabs.setMinimumWidth(300)
-        tabs.setMaximumWidth(360)
-        tabs.addTab(self._build_traffic_tab(), "Trafic")
-        tabs.addTab(self._build_rescue_tab(), "Secours")
-        tabs.addTab(self._build_network_tab(), "Reseau")
-        body.addWidget(tabs)
-        layout.addLayout(body, 1)
-        layout.addWidget(QLabel("Voiture : bleu | Pompier 01 : rouge | Ambulance 02 : blanc"))
-        self.footer = QLabel()
-        layout.addWidget(self.footer)
+        contenu = QHBoxLayout()
+        self.vue = VueCarte()
+        contenu.addWidget(self.vue, 1)
+        onglets = QTabWidget()
+        onglets.setMinimumWidth(300)
+        onglets.setMaximumWidth(360)
+        onglets.addTab(self._construire_onglet_trafic(), "Trafic")
+        onglets.addTab(self._construire_onglet_secours(), "Secours")
+        onglets.addTab(self._construire_onglet_reseau(), "Reseau")
+        contenu.addWidget(onglets)
+        disposition.addLayout(contenu, 1)
+        disposition.addWidget(QLabel("Voiture : bleu | Pompier 01 : rouge | Ambulance 02 : blanc"))
+        self.pied_fenetre = QLabel()
+        disposition.addWidget(self.pied_fenetre)
 
-    def _build_controls(self, layout):
-        row = QHBoxLayout()
-        self.play_button = QPushButton("Demarrer")
-        self.play_button.clicked.connect(self.toggle_play)
-        row.addWidget(self.play_button)
-        self.reset_button = QPushButton("Recommencer")
-        self.reset_button.clicked.connect(self.reset)
-        row.addWidget(self.reset_button)
-        row.addWidget(QLabel("Vitesse"))
-        self.speed_input = QComboBox()
-        for label, speed in (("x0.5", 0.5), ("x1", 2.0), ("x2", 3.0)):
-            self.speed_input.addItem(label, speed)
-        self.speed_input.setCurrentIndex(1)
-        self.speed_input.currentIndexChanged.connect(self._change_speed)
-        row.addWidget(self.speed_input)
-        row.addWidget(QLabel("Voitures / minute"))
-        self.rate_input = QSpinBox()
-        self.rate_input.setRange(0, 25)
-        self.rate_input.setValue(self.scenario.rate)
-        self.rate_input.valueChanged.connect(self._change_rate)
-        row.addWidget(self.rate_input)
-        row.addStretch()
-        self.clock_label = QLabel("00:00")
-        row.addWidget(self.clock_label)
-        layout.addLayout(row)
+    def _construire_commandes(self, disposition):
+        ligne = QHBoxLayout()
+        self.bouton_demarrer = QPushButton("Demarrer")
+        self.bouton_demarrer.clicked.connect(self.basculer_pause)
+        ligne.addWidget(self.bouton_demarrer)
+        self.bouton_recommencer = QPushButton("Recommencer")
+        self.bouton_recommencer.clicked.connect(self.recommencer)
+        ligne.addWidget(self.bouton_recommencer)
+        ligne.addWidget(QLabel("Vitesse"))
+        self.choix_vitesse = QComboBox()
+        for etiquette, vitesse in (("x0.5", 0.5), ("x1", 2.0), ("x2", 3.0)):
+            self.choix_vitesse.addItem(etiquette, vitesse)
+        self.choix_vitesse.setCurrentIndex(1)
+        self.choix_vitesse.currentIndexChanged.connect(self._changer_vitesse)
+        ligne.addWidget(self.choix_vitesse)
+        ligne.addWidget(QLabel("Voitures / minute"))
+        self.choix_debit = QSpinBox()
+        self.choix_debit.setRange(0, 25)
+        self.choix_debit.setValue(self.scenario.debit)
+        self.choix_debit.valueChanged.connect(self._changer_debit)
+        ligne.addWidget(self.choix_debit)
+        ligne.addStretch()
+        self.etiquette_horloge = QLabel("00:00")
+        ligne.addWidget(self.etiquette_horloge)
+        disposition.addLayout(ligne)
 
         missions = QHBoxLayout()
         missions.addWidget(QLabel("Vehicule"))
-        self.rescue_combo = QComboBox()
-        self.rescue_combo.addItem("01 - Pompiers", "01")
-        self.rescue_combo.addItem("02 - Ambulance", "02")
-        missions.addWidget(self.rescue_combo)
+        self.choix_secours = QComboBox()
+        self.choix_secours.addItem("01 - Pompiers", "01")
+        self.choix_secours.addItem("02 - Ambulance", "02")
+        missions.addWidget(self.choix_secours)
         missions.addWidget(QLabel("Intervention"))
-        self.destination_combo = QComboBox()
-        for side, name in DESTINATIONS.items():
-            self.destination_combo.addItem(name, side)
-        self.destination_combo.setCurrentIndex(self.destination_combo.findData("S"))
-        missions.addWidget(self.destination_combo)
-        self.send_button = QPushButton("Envoyer en intervention")
-        self.send_button.clicked.connect(self._send_selected)
-        missions.addWidget(self.send_button)
-        self.rescue_combo.currentIndexChanged.connect(self._update_send_button)
+        self.choix_destination = QComboBox()
+        for cote, nom in DESTINATIONS.items():
+            self.choix_destination.addItem(nom, cote)
+        self.choix_destination.setCurrentIndex(self.choix_destination.findData("S"))
+        missions.addWidget(self.choix_destination)
+        self.bouton_envoi = QPushButton("Envoyer en intervention")
+        self.bouton_envoi.clicked.connect(self._envoyer_selection)
+        missions.addWidget(self.bouton_envoi)
+        self.choix_secours.currentIndexChanged.connect(self._actualiser_bouton_envoi)
         missions.addStretch()
-        layout.addLayout(missions)
+        disposition.addLayout(missions)
 
-    def _build_traffic_tab(self):
+    def _construire_onglet_trafic(self):
         page = QWidget()
-        form = QFormLayout(page)
-        self.car_count = QLabel()
-        self.waiting_count = QLabel()
-        self.completed_count = QLabel()
-        form.addRow("Voitures presentes", self.car_count)
-        form.addRow("Voitures en attente", self.waiting_count)
-        form.addRow("Trajets termines", self.completed_count)
-        self.signal_labels = {}
-        for axis in ("Nord-Sud", "Est-Ouest"):
-            self.signal_labels[axis] = QLabel()
-            form.addRow(axis, self.signal_labels[axis])
-        self.phase_label = QLabel()
-        self.phase_label.setWordWrap(True)
-        form.addRow(self.phase_label)
-        form.addRow(QLabel("Temps d'accumulation"))
-        self.accumulation_labels = {}
-        for axis, name in (("EW", "Ligne horizontale"), ("NS", "Ligne verticale")):
-            self.accumulation_labels[axis] = QLabel()
-            form.addRow(name, self.accumulation_labels[axis])
-        explanation = QLabel("Au-dela de 8 s de vert prioritaire, les secondes sont "
+        formulaire = QFormLayout(page)
+        self.nombre_voitures = QLabel()
+        self.nombre_attentes = QLabel()
+        self.nombre_trajets_termines = QLabel()
+        formulaire.addRow("Voitures presentes", self.nombre_voitures)
+        formulaire.addRow("Voitures en attente", self.nombre_attentes)
+        formulaire.addRow("Trajets termines", self.nombre_trajets_termines)
+        self.etiquettes_feux = {}
+        for axe in ("Nord-Sud", "Est-Ouest"):
+            self.etiquettes_feux[axe] = QLabel()
+            formulaire.addRow(axe, self.etiquettes_feux[axe])
+        self.etiquette_phase = QLabel()
+        self.etiquette_phase.setWordWrap(True)
+        formulaire.addRow(self.etiquette_phase)
+        formulaire.addRow(QLabel("Temps d'accumulation"))
+        self.etiquettes_reserves = {}
+        for axe, nom in (("EW", "Ligne horizontale"), ("NS", "Ligne verticale")):
+            self.etiquettes_reserves[axe] = QLabel()
+            formulaire.addRow(nom, self.etiquettes_reserves[axe])
+        explication = QLabel("Au-dela de 8 s de vert prioritaire, les secondes sont "
                              "stockees pour l'autre ligne. Les deux reserves se "
                              "compensent ; un quart du solde prolonge chaque "
                              "prochain vert de la ligne concernee, hors priorite.")
-        explanation.setWordWrap(True)
-        form.addRow(explanation)
+        explication.setWordWrap(True)
+        formulaire.addRow(explication)
         return page
 
-    def _build_rescue_tab(self):
+    def _construire_onglet_secours(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
-        self.rescue_widgets = {}
-        self.estimate_labels = {}
-        for identifier in ("01", "02"):
-            layout.addWidget(QLabel("Secours " + identifier))
-            status = QLabel()
-            stage = QLabel()
-            progress = QProgressBar()
-            progress.setRange(0, 100)
-            estimates = QLabel()
-            estimates.setWordWrap(True)
-            layout.addWidget(status)
-            layout.addWidget(stage)
-            layout.addWidget(progress)
-            layout.addWidget(estimates)
-            self.rescue_widgets[identifier] = (status, stage, progress)
-            self.estimate_labels[identifier] = estimates
-        layout.addStretch()
+        disposition = QVBoxLayout(page)
+        self.widgets_secours = {}
+        self.etiquettes_estimations = {}
+        for identifiant in ("01", "02"):
+            disposition.addWidget(QLabel("Secours " + identifiant))
+            statut = QLabel()
+            etape = QLabel()
+            progression = QProgressBar()
+            progression.setRange(0, 100)
+            estimations = QLabel()
+            estimations.setWordWrap(True)
+            disposition.addWidget(statut)
+            disposition.addWidget(etape)
+            disposition.addWidget(progression)
+            disposition.addWidget(estimations)
+            self.widgets_secours[identifiant] = (statut, etape, progression)
+            self.etiquettes_estimations[identifiant] = estimations
+        disposition.addStretch()
         return page
 
-    def _build_network_tab(self):
+    def _construire_onglet_reseau(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
-        self.network_label = QLabel()
-        self.network_label.setWordWrap(True)
-        layout.addWidget(self.network_label)
-        layout.addStretch()
+        disposition = QVBoxLayout(page)
+        self.etiquette_reseau = QLabel()
+        self.etiquette_reseau.setWordWrap(True)
+        disposition.addWidget(self.etiquette_reseau)
+        disposition.addStretch()
         return page
 
-    def _send_selected(self):
-        self.start_mission(self.rescue_combo.currentData(), self.destination_combo.currentData())
+    def _envoyer_selection(self):
+        self.demarrer_mission(self.choix_secours.currentData(), self.choix_destination.currentData())
 
-    def _update_send_button(self):
-        rescue = self.scenario.get_rescue(self.rescue_combo.currentData())
-        self.send_button.setEnabled(not rescue.busy)
-        self.destination_combo.setEnabled(not rescue.busy)
-        if rescue.busy:
-            self.destination_combo.setCurrentIndex(self.destination_combo.findData(rescue.destination))
-            self.send_button.setText("Ce secours est deja en mission")
+    def _actualiser_bouton_envoi(self):
+        secours = self.scenario.obtenir_secours(self.choix_secours.currentData())
+        self.bouton_envoi.setEnabled(not secours.occupe)
+        self.choix_destination.setEnabled(not secours.occupe)
+        if secours.occupe:
+            self.choix_destination.setCurrentIndex(self.choix_destination.findData(secours.destination))
+            self.bouton_envoi.setText("Ce secours est deja en mission")
         else:
-            self.send_button.setText("Envoyer en intervention")
+            self.bouton_envoi.setText("Envoyer en intervention")
 
-    def _change_speed(self):
-        self.set_speed(self.speed_input.currentData())
+    def _changer_vitesse(self):
+        self.regler_vitesse(self.choix_vitesse.currentData())
 
-    def set_speed(self, value):
-        self.speed = value
-        self.clock.restart()
+    def regler_vitesse(self, valeur):
+        self.vitesse = valeur
+        self.horloge.restart()
 
-    def _change_rate(self, value):
-        self.scenario.rate = value
+    def _changer_debit(self, valeur):
+        self.scenario.debit = valeur
 
-    def toggle_play(self):
-        self.playing = not self.playing
-        self.clock.restart()
-        self.refresh()
+    def basculer_pause(self):
+        self.en_cours = not self.en_cours
+        self.horloge.restart()
+        self.actualiser()
 
-    def reset(self):
-        self.scenario = Simulation(rate=self.rate_input.value())
+    def recommencer(self):
+        self.scenario = Simulation(debit=self.choix_debit.value())
         if self.client:
-            self.client.publish("01", "disponible")
-            self.client.publish("02", "disponible")
-        self.elapsed = 0
-        self.playing = False
-        self.clock.restart()
-        self.refresh()
+            self.client.publier("01", "disponible")
+            self.client.publier("02", "disponible")
+        self.temps_ecoule = 0
+        self.en_cours = False
+        self.horloge.restart()
+        self.actualiser()
 
-    def _tick(self):
+    def _actualiser_simulation(self):
         # Temps reel depuis le dernier appel, limite en cas de fenetre bloquee.
-        dt = min(self.clock.restart() / 1000, 0.1)
-        if self.playing:
-            self.scenario.traffic_bounds = self.view.traffic_bounds()
-            self.scenario.advance(dt * self.speed)
-            self.elapsed = self.scenario.time
-        self._publish_events()
-        self.refresh()
+        dt = min(self.horloge.restart() / 1000, 0.1)
+        if self.en_cours:
+            self.scenario.limites_circulation = self.vue.limites_circulation()
+            self.scenario.avancer(dt * self.vitesse)
+            self.temps_ecoule = self.scenario.temps
+        self._publier_evenements()
+        self.actualiser()
 
-    def start_mission(self, identifier, destination="S"):
-        self.scenario.start_mission(identifier, destination)
-        self._publish_events()
-        self.refresh()
+    def demarrer_mission(self, identifiant, destination="S"):
+        self.scenario.demarrer_mission(identifiant, destination)
+        self._publier_evenements()
+        self.actualiser()
 
-    def _publish_events(self):
-        for identifier, state in self.scenario.drain_events():
+    def _publier_evenements(self):
+        for identifiant, etat in self.scenario.recuperer_evenements():
             if self.client:
-                self.client.publish(identifier, state)
+                self.client.publier(identifiant, etat)
 
-    def refresh(self):
-        frame = self.scenario.frame()
-        self.view.sync(frame)
-        seconds = int(self.elapsed)
-        self.clock_label.setText(f"{seconds // 60:02d}:{seconds % 60:02d}")
-        self.car_count.setText(str(len(frame.cars)))
-        waiting = 0
-        for car in frame.cars:
-            if car.waiting:
-                waiting += 1
-        self.waiting_count.setText(str(waiting))
-        self.completed_count.setText(str(frame.completed))
-        names = {"red": "Rouge", "amber": "Orange", "green": "Vert"}
-        self.signal_labels["Nord-Sud"].setText(names[frame.north_south])
-        self.signal_labels["Est-Ouest"].setText(names[frame.east_west])
-        if frame.phase_remaining > 0:
-            remaining = f"{ceil(frame.phase_remaining)} s de cycle restantes"
+    def actualiser(self):
+        etat_simulation = self.scenario.etat_simulation()
+        self.vue.actualiser(etat_simulation)
+        secondes = int(self.temps_ecoule)
+        self.etiquette_horloge.setText(f"{secondes // 60:02d}:{secondes % 60:02d}")
+        self.nombre_voitures.setText(str(len(etat_simulation.voitures)))
+        en_attente = 0
+        for voiture in etat_simulation.voitures:
+            if voiture.en_attente:
+                en_attente += 1
+        self.nombre_attentes.setText(str(en_attente))
+        self.nombre_trajets_termines.setText(str(etat_simulation.trajets_termines))
+        noms = {"red": "Rouge", "amber": "Orange", "green": "Vert"}
+        self.etiquettes_feux["Nord-Sud"].setText(noms[etat_simulation.nord_sud])
+        self.etiquettes_feux["Est-Ouest"].setText(noms[etat_simulation.est_ouest])
+        if etat_simulation.temps_phase_restant > 0:
+            temps_restant = f"{ceil(etat_simulation.temps_phase_restant)} s de cycle restantes"
         else:
-            remaining = "Passage en cours"
-        self.phase_label.setText(f"{frame.phase_name}\n{remaining}")
-        debt = self.scenario.lights.debt
-        for axis, label in self.accumulation_labels.items():
-            label.setText(f"{debt[axis]:.1f} s stockees")
-        self._update_send_button()
-        for rescue in frame.rescues:
-            self._refresh_rescue(rescue)
-        if self.playing:
-            self.play_button.setText("Mettre en pause")
-            self.footer.setText("Simulation en cours")
-        elif self.elapsed > 0:
-            self.play_button.setText("Reprendre")
-            self.footer.setText("Simulation en pause")
+            temps_restant = "Passage en cours"
+        self.etiquette_phase.setText(f"{etat_simulation.nom_phase}\n{temps_restant}")
+        reserve_temps = self.scenario.feux.reserve_temps
+        for axe, etiquette in self.etiquettes_reserves.items():
+            etiquette.setText(f"{reserve_temps[axe]:.1f} s stockees")
+        self._actualiser_bouton_envoi()
+        for secours in etat_simulation.secours:
+            self._actualiser_secours(secours)
+        if self.en_cours:
+            self.bouton_demarrer.setText("Mettre en pause")
+            self.pied_fenetre.setText("Simulation en cours")
+        elif self.temps_ecoule > 0:
+            self.bouton_demarrer.setText("Reprendre")
+            self.pied_fenetre.setText("Simulation en pause")
         else:
-            self.play_button.setText("Demarrer")
-            self.footer.setText("Pret a demarrer")
+            self.bouton_demarrer.setText("Demarrer")
+            self.pied_fenetre.setText("Pret a demarrer")
         if self.client:
-            status, pending = self.client.snapshot()
-            self.network_label.setText(f"{status}\n{self.client.host}:{self.client.port}\nMises a jour en attente : {pending}")
+            statut, en_attente_envoi = self.client.instantane()
+            self.etiquette_reseau.setText(f"{statut}\n{self.client.hote}:{self.client.port}\nMises a jour en attente : {en_attente_envoi}")
         else:
-            self.network_label.setText("Mode local : centre non connecte")
+            self.etiquette_reseau.setText("Mode local : centre non connecte")
 
-    def _refresh_rescue(self, rescue):
-        status, stage, progress = self.rescue_widgets[rescue.identifier]
-        if rescue.busy:
-            status.setText("Occupe")
+    def _actualiser_secours(self, secours):
+        statut, etape, progression = self.widgets_secours[secours.identifiant]
+        if secours.occupe:
+            statut.setText("Occupe")
         else:
-            status.setText("Disponible")
-        stage.setText(rescue.stage)
-        progress.setValue(round(rescue.progress * 100))
-        model = self.scenario.get_rescue(rescue.identifier)
-        if not model.busy:
-            text = f"Duree prevue hors attentes : {model.total_estimate:.0f} s"
+            statut.setText("Disponible")
+        etape.setText(secours.etape)
+        progression.setValue(round(secours.progression * 100))
+        modele = self.scenario.obtenir_secours(secours.identifiant)
+        if not modele.occupe:
+            texte = f"Duree prevue hors attentes : {modele.duree_estimee:.0f} s"
         else:
-            distance, eta = self.scenario.approach(model)
-            text = "Carrefour franchi"
+            distance, delai_arrivee = self.scenario.approche(modele)
+            texte = "Carrefour franchi"
             if distance is not None:
-                text = f"Carrefour : {distance:.0f} m / {eta:.1f} s"
-            remaining = (model.route.length - model.distance) / model.speed
-            if model.visited:
-                remaining += model.dwell_remaining
+                texte = f"Carrefour : {distance:.0f} m / {delai_arrivee:.1f} s"
+            temps_restant = (modele.trajet.longueur - modele.distance) / modele.vitesse
+            if modele.intervention_effectuee:
+                temps_restant += modele.temps_intervention_restant
             else:
-                remaining += 8
-            text += f"\nMission : {self.elapsed - model.started_at:.0f} s ecoulees"
-            text += f"\nHors attentes : {remaining:.0f} s restantes"
-            text += f"\nPrevision au depart : {model.total_estimate:.0f} s"
-        self.estimate_labels[rescue.identifier].setText(text)
+                temps_restant += 8
+            texte += f"\nMission : {self.temps_ecoule - modele.debut_mission:.0f} s ecoulees"
+            texte += f"\nHors attentes : {temps_restant:.0f} s restantes"
+            texte += f"\nPrevision au depart : {modele.duree_estimee:.0f} s"
+        self.etiquettes_estimations[secours.identifiant].setText(texte)
 
-    def closeEvent(self, event):
-        self.timer.stop()
+    def closeEvent(self, evenement):
+        self.minuteur.stop()
         if self.client:
-            self.client.close()
-        super().closeEvent(event)
+            self.client.fermer()
+        super().closeEvent(evenement)

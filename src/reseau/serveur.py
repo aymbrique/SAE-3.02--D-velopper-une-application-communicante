@@ -5,112 +5,112 @@ import socket
 from threading import Event, Lock, Thread
 from time import monotonic
 
-from src.reseau.protocole import Decoder, encode, validate
+from src.reseau.protocole import Decodeur, encoder, valider
 
 
-class CoordinationServer:
-    def __init__(self, store, host="0.0.0.0", port=5000):
-        self.store = store
-        self.host = host
+class ServeurCentre:
+    def __init__(self, stockage, hote="0.0.0.0", port=5000):
+        self.stockage = stockage
+        self.hote = hote
         self.port = port
-        self.stop_event = Event()
-        self.lock = Lock()
-        self.thread = None
-        self.listener = None
-        self.connected = False
-        self.seen = set()
-        self.status = "En attente de la simulation"
-        self.data = {"vehicles": [], "history": []}
+        self.arret_demande = Event()
+        self.verrou = Lock()
+        self.thread_reseau = None
+        self.ecouteur = None
+        self.connecte = False
+        self.recus = set()
+        self.statut = "En attente de la simulation"
+        self.donnees = {"vehicles": [], "history": []}
 
-    def snapshot(self):
-        with self.lock:
-            return {"vehicles": self.data["vehicles"], "history": self.data["history"],
-                    "connected": self.connected, "status": self.status,
-                    "seen": set(self.seen)}
+    def instantane(self):
+        with self.verrou:
+            return {"vehicles": self.donnees["vehicles"], "history": self.donnees["history"],
+                    "connected": self.connecte, "status": self.statut,
+                    "seen": set(self.recus)}
 
-    def _status(self, text, connected=False):
-        with self.lock:
-            self.status = text
-            self.connected = connected
+    def _modifier_statut(self, texte, connecte=False):
+        with self.verrou:
+            self.statut = texte
+            self.connecte = connecte
 
-    def start(self):
-        self.data = self.store.snapshot()
-        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def demarrer(self):
+        self.donnees = self.stockage.instantane()
+        self.ecouteur = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.listener.bind((self.host, self.port))
-            self.listener.listen(4)
-            self.port = self.listener.getsockname()[1]
+            self.ecouteur.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.ecouteur.bind((self.hote, self.port))
+            self.ecouteur.listen(4)
+            self.port = self.ecouteur.getsockname()[1]
         except OSError:
-            self.listener.close()
+            self.ecouteur.close()
             raise
-        self.thread = Thread(target=self._run, name="serveur-tcp", daemon=True)
-        self.thread.start()
+        self.thread_reseau = Thread(target=self._executer, name="serveur-tcp", daemon=True)
+        self.thread_reseau.start()
 
-    def close(self):
-        self.stop_event.set()
-        if self.thread:
-            self.thread.join(timeout=8)
+    def fermer(self):
+        self.arret_demande.set()
+        if self.thread_reseau:
+            self.thread_reseau.join(timeout=8)
 
-    def _run(self):
-        peer = None
+    def _executer(self):
+        client_actif = None
         session = None
-        decoder = Decoder()
-        last_seen = monotonic()
+        decodeur = Decodeur()
+        derniere_reception = monotonic()
         try:
-            while not self.stop_event.is_set():
+            while not self.arret_demande.is_set():
                 # Surveiller les nouvelles connexions et le client actif.
-                sockets = [self.listener]
-                if peer is not None:
-                    sockets.append(peer)
-                readable, _, _ = select.select(sockets, [], [], 0.2)
-                if self.listener in readable:
-                    candidate, address = self.listener.accept()
-                    candidate.settimeout(0.5)
-                    if peer:
-                        candidate.close()
+                connexions = [self.ecouteur]
+                if client_actif is not None:
+                    connexions.append(client_actif)
+                lisibles, _, _ = select.select(connexions, [], [], 0.2)
+                if self.ecouteur in lisibles:
+                    candidat, adresse = self.ecouteur.accept()
+                    candidat.settimeout(0.5)
+                    if client_actif:
+                        candidat.close()
                     else:
-                        peer = candidate
-                        decoder = Decoder()
+                        client_actif = candidat
+                        decodeur = Decodeur()
                         session = None
-                        with self.lock:
-                            self.seen = set()
-                        last_seen = monotonic()
-                        self._status(f"Connexion de {address[0]} - attente des etats")
-                if peer and peer in readable:
+                        with self.verrou:
+                            self.recus = set()
+                        derniere_reception = monotonic()
+                        self._modifier_statut(f"Connexion de {adresse[0]} - attente des etats")
+                if client_actif and client_actif in lisibles:
                     try:
-                        chunk = peer.recv(4096)
-                        if not chunk:
+                        morceau = client_actif.recv(4096)
+                        if not morceau:
                             raise ConnectionError("Client deconnecte")
-                        for message in decoder.feed(chunk):
-                            validate(message)
+                        for message in decodeur.alimenter(morceau):
+                            valider(message)
                             if message["type"] == "ping":
-                                peer.sendall(encode({"type": "pong"}))
+                                client_actif.sendall(encoder({"type": "pong"}))
                             else:
                                 if session and session != message["session"]:
                                     raise ValueError("Changement de session sur une connexion")
                                 session = message["session"]
                                 # Confirmer seulement apres enregistrement dans MariaDB.
-                                self.store.save(message)
-                                updated = self.store.snapshot()
-                                with self.lock:
-                                    self.data = updated
-                                    self.seen.add(message["id"])
-                                peer.sendall(encode({"type": "ack", "session": session,
+                                self.stockage.enregistrer(message)
+                                mis_a_jour = self.stockage.instantane()
+                                with self.verrou:
+                                    self.donnees = mis_a_jour
+                                    self.recus.add(message["id"])
+                                client_actif.sendall(encoder({"type": "ack", "session": session,
                                                      "id": message["id"], "numero": message["numero"]}))
-                                self._status("Liaison active", True)
-                        last_seen = monotonic()
+                                self._modifier_statut("Liaison active", True)
+                        derniere_reception = monotonic()
                     except Exception as error:
                         # Aucun ACK si la transaction echoue : le client conservera son message.
-                        self._status(f"Liaison interrompue : {type(error).__name__}")
-                        peer.close()
-                        peer = None
-                if peer and monotonic() - last_seen > 6:
-                    self._status("Liaison interrompue : delai de reception depasse")
-                    peer.close()
-                    peer = None
+                        self._modifier_statut(f"Liaison interrompue : {type(error).__name__}")
+                        client_actif.close()
+                        client_actif = None
+                if client_actif and monotonic() - derniere_reception > 6:
+                    self._modifier_statut("Liaison interrompue : delai de reception depasse")
+                    client_actif.close()
+                    client_actif = None
         finally:
-            if peer:
-                peer.close()
-            self.listener.close()
-            self._status("Serveur arrete - liaison interrompue")
+            if client_actif:
+                client_actif.close()
+            self.ecouteur.close()
+            self._modifier_statut("Serveur arrete - liaison interrompue")

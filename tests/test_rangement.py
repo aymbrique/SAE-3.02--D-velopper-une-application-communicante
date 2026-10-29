@@ -8,221 +8,221 @@ import unittest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QPainterPath, QPolygonF
 
-from src.simulation.moteur import GAP, STEP, Simulation
-from src.simulation.priorite import PULL_OVER, corners
-from src.modeles.plan import on_road
-from traffic_checks import assert_spacing
+from src.simulation.moteur import PAS_TEMPS, Simulation
+from src.simulation.priorite import DECALAGE_RANGEMENT, coins_carrosserie
+from src.modeles.plan import sur_chaussee
+from controles_circulation import verifier_espacement
 
 
-class RangementTests(unittest.TestCase):
-    def test_opposite_lower_turns_finish_after_yielding_before_junction(self):
-        for identifier in ("01", "02"):
-            for variant in (None, "lower_west"):
-                with self.subTest(rescue=identifier, variant=variant):
-                    sim = Simulation(rate=0)
-                    sim.start_mission(identifier, "S")
-                    rescue = sim.get_rescue(identifier)
-                    rescue.crossing_index = 1
-                    stop = next(stop for stop, _, key in rescue.route.junctions if key == "D")
-                    rescue.distance = stop - 300
-                    car = sim.spawn("N", "straight", variant=variant)
-                    car.crossing_index = 1
-                    car_stop, car_end, _ = next(zone for zone in car.route.junctions if zone[2] == "D")
-                    car.distance = car_stop - car.manoeuvre_length
+class TestsRangement(unittest.TestCase):
+    def test_virages_opposes_en_bas_finissent_apres_rangement(self):
+        for identifiant in ("01", "02"):
+            for variante in (None, "lower_west"):
+                with self.subTest(secours=identifiant, variante=variante):
+                    simulation = Simulation(debit=0)
+                    simulation.demarrer_mission(identifiant, "S")
+                    secours = simulation.obtenir_secours(identifiant)
+                    secours.indice_passage = 1
+                    arret = next(arret for arret, _, cle in secours.trajet.raccordements if cle == "D")
+                    secours.distance = arret - 300
+                    voiture = simulation.ajouter_voiture("N", "straight", variante=variante)
+                    voiture.indice_passage = 1
+                    arret_voiture, fin_voiture, _ = next(zone for zone in voiture.trajet.raccordements if zone[2] == "D")
+                    voiture.distance = arret_voiture - voiture.longueur_manoeuvre
                     for _ in range(1800):
-                        sim.advance(STEP)
-                        assert_spacing(self, sim)
-                        self.assertTrue(all(on_road(x, y) for x, y in corners(car, car.position)))
-                        if not rescue.busy and car.distance >= car.route.length:
+                        simulation.avancer(PAS_TEMPS)
+                        verifier_espacement(self, simulation)
+                        self.assertTrue(all(sur_chaussee(x, y) for x, y in coins_carrosserie(voiture, voiture.position)))
+                        if not secours.occupe and voiture.distance >= voiture.trajet.longueur:
                             break
-                    self.assertGreater(car.distance, car_end)
-                    self.assertFalse(rescue.busy)
-                    self.assertGreaterEqual(car.distance, car.route.length)
+                    self.assertGreater(voiture.distance, fin_voiture)
+                    self.assertFalse(secours.occupe)
+                    self.assertGreaterEqual(voiture.distance, voiture.trajet.longueur)
 
-    def test_rescue_waits_for_roadside_car_already_in_lower_junction(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("01", "S")
-        rescue = sim.get_rescue("01")
-        rescue.crossing_index = 1
-        stop, end, _ = next(zone for zone in rescue.route.junctions if zone[2] == "D")
-        rescue.distance = stop - 100
-        car = sim.spawn("N", "straight")
-        car.crossing_index = 1
-        car_stop, car_end, _ = next(zone for zone in car.route.junctions if zone[2] == "D")
-        car.distance = car_stop + 10
-        car.lateral_offset = PULL_OVER
+    def test_secours_attend_voiture_rangee_deja_engagee_en_bas(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("01", "S")
+        secours = simulation.obtenir_secours("01")
+        secours.indice_passage = 1
+        arret, fin, _ = next(zone for zone in secours.trajet.raccordements if zone[2] == "D")
+        secours.distance = arret - 100
+        voiture = simulation.ajouter_voiture("N", "straight")
+        voiture.indice_passage = 1
+        arret_voiture, fin_voiture, _ = next(zone for zone in voiture.trajet.raccordements if zone[2] == "D")
+        voiture.distance = arret_voiture + 10
+        voiture.decalage_lateral = DECALAGE_RANGEMENT
         for _ in range(500):
-            sim.advance(STEP)
-            assert_spacing(self, sim)
-        self.assertGreater(car.distance, car_end)
-        self.assertGreater(rescue.distance, end)
-        self.assertEqual(car.lateral_offset, 0)
+            simulation.avancer(PAS_TEMPS)
+            verifier_espacement(self, simulation)
+        self.assertGreater(voiture.distance, fin_voiture)
+        self.assertGreater(secours.distance, fin)
+        self.assertEqual(voiture.decalage_lateral, 0)
 
-    def test_pull_over_and_merge_keep_a_moderate_angle_inside_road(self):
-        sim = Simulation(rate=0)
-        car = sim.spawn("N", "straight")
-        start = 350
-        for first, last in ((0, PULL_OVER), (PULL_OVER, 0)):
-            with self.subTest(offsets=(first, last)):
-                car.manoeuvre_start = start
-                car.manoeuvre_from = first
-                car.manoeuvre_target = last
-                previous_y = -float("inf")
-                for step in range(101):
-                    distance = start + car.manoeuvre_length * step / 100
-                    x, y, heading = car.position_at(distance)
-                    offset, _ = car.roadside_offset(distance)
-                    self.assertLessEqual(abs(offset), 22)
-                    self.assertLess(abs(heading - 90), 25)
-                    self.assertGreater(y, previous_y)
-                    self.assertTrue(all(on_road(px, py) for px, py in corners(car, (x, y, heading))))
-                    previous_y = y
+    def test_rangement_et_reinsertion_avec_angle_modere_sur_route(self):
+        simulation = Simulation(debit=0)
+        voiture = simulation.ajouter_voiture("N", "straight")
+        debut = 350
+        for premier, dernier in ((0, DECALAGE_RANGEMENT), (DECALAGE_RANGEMENT, 0)):
+            with self.subTest(decalages=(premier, dernier)):
+                voiture.debut_manoeuvre = debut
+                voiture.decalage_initial = premier
+                voiture.decalage_cible = dernier
+                y_precedent = -float("inf")
+                for pas in range(101):
+                    distance = debut + voiture.longueur_manoeuvre * pas / 100
+                    x, y, orientation = voiture.position_a(distance)
+                    decalage, _ = voiture.decalage_lateral_a(distance)
+                    self.assertLessEqual(abs(decalage), 22)
+                    self.assertLess(abs(orientation - 90), 25)
+                    self.assertGreater(y, y_precedent)
+                    self.assertTrue(all(sur_chaussee(px, py) for px, py in coins_carrosserie(voiture, (x, y, orientation))))
+                    y_precedent = y
 
-    def test_pull_over_near_lower_turn_keeps_clear_of_rescue(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("01", "S")
-        rescue = sim.get_rescue("01")
-        rescue_stop = next(stop for stop, _, key in rescue.route.junctions if key == "D")
-        rescue.distance = rescue_stop - 240
-        sim.crossing_owners.add(rescue.identifier)
-        cars = []
+    def test_rangement_pres_virage_bas_sans_contact_secours(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("01", "S")
+        secours = simulation.obtenir_secours("01")
+        arret_secours = next(arret for arret, _, cle in secours.trajet.raccordements if cle == "D")
+        secours.distance = arret_secours - 240
+        simulation.vehicules_engages.add(secours.identifiant)
+        voitures = []
         for index in range(2):
-            car = sim.spawn("N", "straight")
-            stop = next(stop for stop, _, key in car.route.junctions if key == "D")
-            car.distance = stop - 84 - 60 * index
-            car.crossing_index = 1
-            cars.append(car)
-        max_offset = 0
+            voiture = simulation.ajouter_voiture("N", "straight")
+            arret = next(arret for arret, _, cle in voiture.trajet.raccordements if cle == "D")
+            voiture.distance = arret - 84 - 60 * index
+            voiture.indice_passage = 1
+            voitures.append(voiture)
+        decalage_max = 0
         for _ in range(1800):
-            sim.advance(STEP)
-            self.assert_bodies_do_not_touch(sim)
-            for car in cars:
-                max_offset = max(max_offset, car.lateral_offset)
-                self.assertLessEqual(car.lateral_offset, 22)
-                self.assertTrue(all(on_road(x, y) for x, y in corners(car, car.position)))
-            if not rescue.busy and all(car.distance >= car.route.length for car in cars):
+            simulation.avancer(PAS_TEMPS)
+            self.verifier_absence_contact(simulation)
+            for voiture in voitures:
+                decalage_max = max(decalage_max, voiture.decalage_lateral)
+                self.assertLessEqual(voiture.decalage_lateral, 22)
+                self.assertTrue(all(sur_chaussee(x, y) for x, y in coins_carrosserie(voiture, voiture.position)))
+            if not secours.occupe and all(voiture.distance >= voiture.trajet.longueur for voiture in voitures):
                 break
-        self.assertEqual(max_offset, PULL_OVER)
-        self.assertFalse(rescue.busy)
-        self.assertTrue(all(car.distance >= car.route.length for car in cars))
+        self.assertEqual(decalage_max, DECALAGE_RANGEMENT)
+        self.assertFalse(secours.occupe)
+        self.assertTrue(all(voiture.distance >= voiture.trajet.longueur for voiture in voitures))
 
-    def assert_bodies_do_not_touch(self, simulation):
-        for first, second in combinations(simulation.vehicles, 2):
-            polygons = []
-            for vehicle in (first, second):
-                path = QPainterPath()
-                path.addPolygon(QPolygonF([QPointF(x, y) for x, y in corners(vehicle, vehicle.position, 1)]))
-                path.closeSubpath()
-                polygons.append(path)
-            self.assertFalse(polygons[0].intersects(polygons[1]),
-                             (simulation.time, first.identifier, second.identifier))
+    def verifier_absence_contact(self, simulation):
+        for premier, second in combinations(simulation.vehicules, 2):
+            polygones = []
+            for vehicule in (premier, second):
+                chemin = QPainterPath()
+                chemin.addPolygon(QPolygonF([QPointF(x, y) for x, y in coins_carrosserie(vehicule, vehicule.position, 1)]))
+                chemin.closeSubpath()
+                polygones.append(chemin)
+            self.assertFalse(polygones[0].intersects(polygones[1]),
+                             (simulation.temps, premier.identifiant, second.identifiant))
 
-    def prepared(self, origin="N", returning=False):
-        sim = Simulation(rate=0)
-        sim.start_mission("02", "W")
-        rescue = sim.get_rescue("02")
-        rescue.visited = returning
-        rescue.crossing_index = int(returning)
-        if returning:
-            origin = "W"
-        sim.lights.axis = rescue.crossing[2]
-        rescue.distance = rescue.crossing[0] - 120
-        car = sim.spawn(origin, "straight")
-        car.distance = car.crossing[0] - car.manoeuvre_length
-        rescue.distance = rescue.crossing[0] - car.manoeuvre_length - 120
-        return sim, rescue, car
+    def preparer_situation(self, origine="N", en_retour=False):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("02", "W")
+        secours = simulation.obtenir_secours("02")
+        secours.intervention_effectuee = en_retour
+        secours.indice_passage = int(en_retour)
+        if en_retour:
+            origine = "W"
+        simulation.feux.axe = secours.passage[2]
+        secours.distance = secours.passage[0] - 120
+        voiture = simulation.ajouter_voiture(origine, "straight")
+        voiture.distance = voiture.passage[0] - voiture.longueur_manoeuvre
+        secours.distance = secours.passage[0] - voiture.longueur_manoeuvre - 120
+        return simulation, secours, voiture
 
-    def test_car_pulls_over_stops_and_returns_after_rescue(self):
-        for returning in (False, True):
-            with self.subTest(returning=returning):
-                sim, rescue, car = self.prepared(returning=returning)
-                initial = car.distance
-                max_offset = 0
-                stopped_beside = False
-                moved_after = False
+    def test_voiture_se_range_attend_puis_repart_apres_secours(self):
+        for en_retour in (False, True):
+            with self.subTest(en_retour=en_retour):
+                simulation, secours, voiture = self.preparer_situation(en_retour=en_retour)
+                initiale = voiture.distance
+                decalage_max = 0
+                arrete_a_cote = False
+                a_bouge_apres = False
                 for _ in range(300):
-                    sim.advance(STEP)
-                    self.assert_bodies_do_not_touch(sim)
-                    max_offset = max(max_offset, car.lateral_offset)
-                    if car.yielding_to and car.lateral_offset == PULL_OVER:
-                        stopped_beside = True
-                        self.assertAlmostEqual(car.distance, initial + car.manoeuvre_length)
-                        self.assertTrue(car.waiting)
-                        self.assertEqual(car.current_speed, 0)
-                    if car.distance > initial and car.lateral_offset == 0:
-                        moved_after = True
+                    simulation.avancer(PAS_TEMPS)
+                    self.verifier_absence_contact(simulation)
+                    decalage_max = max(decalage_max, voiture.decalage_lateral)
+                    if voiture.cede_aux and voiture.decalage_lateral == DECALAGE_RANGEMENT:
+                        arrete_a_cote = True
+                        self.assertAlmostEqual(voiture.distance, initiale + voiture.longueur_manoeuvre)
+                        self.assertTrue(voiture.en_attente)
+                        self.assertEqual(voiture.vitesse_actuelle, 0)
+                    if voiture.distance > initiale and voiture.decalage_lateral == 0:
+                        a_bouge_apres = True
                         break
-                self.assertEqual(max_offset, PULL_OVER)
-                self.assertTrue(stopped_beside)
-                self.assertTrue(moved_after)
+                self.assertEqual(decalage_max, DECALAGE_RANGEMENT)
+                self.assertTrue(arrete_a_cote)
+                self.assertTrue(a_bouge_apres)
 
-    def test_distant_and_available_rescues_do_not_move_cars_to_roadside(self):
-        sim = Simulation(rate=0)
-        car = sim.spawn("N", "straight")
-        car.distance = car.crossing[0] - 60
-        sim.advance(1)
-        self.assertEqual(car.lateral_offset, 0)
-        self.assertFalse(car.yielding_to)
+    def test_secours_lointain_ou_disponible_ne_declenche_pas_rangement(self):
+        simulation = Simulation(debit=0)
+        voiture = simulation.ajouter_voiture("N", "straight")
+        voiture.distance = voiture.passage[0] - 60
+        simulation.avancer(1)
+        self.assertEqual(voiture.decalage_lateral, 0)
+        self.assertFalse(voiture.cede_aux)
 
-    def test_roadside_car_actually_changes_its_displayed_position(self):
-        sim, rescue, car = self.prepared()
-        original = car.position
-        sim.advance(1)
-        frame_car = next(v for v in sim.frame().cars if v.identifier == car.identifier)
-        self.assertLess(frame_car.x, original[0])
-        self.assertGreater(frame_car.y, original[1])
-        self.assertNotEqual(frame_car.heading, original[2])
-        self.assertIn("cote", frame_car.stage)
-        self.assert_bodies_do_not_touch(sim)
+    def test_rangement_change_position_affichee(self):
+        simulation, secours, voiture = self.preparer_situation()
+        origine_avant = voiture.position
+        simulation.avancer(1)
+        etat_voiture = next(v for v in simulation.etat_simulation().voitures if v.identifiant == voiture.identifiant)
+        self.assertLess(etat_voiture.x, origine_avant[0])
+        self.assertGreater(etat_voiture.y, origine_avant[1])
+        self.assertNotEqual(etat_voiture.orientation, origine_avant[2])
+        self.assertIn("cote", etat_voiture.etape)
+        self.verifier_absence_contact(simulation)
 
-    def test_following_straight_car_enters_while_leader_turns_and_slows(self):
-        for turn in ("left", "right"):
-            with self.subTest(turn=turn):
-                sim = Simulation(rate=0)
-                leader = sim.spawn("N", turn)
-                leader.distance = leader.crossing[0] + 70
-                sim.crossing_owners.add(leader.identifier)
-                follower = sim.spawn("N", "straight")
-                follower.distance = follower.crossing[0]
-                sim.advance(STEP)
-                self.assertIn(follower.identifier, sim.crossing_owners)
-                self.assertIn(leader.identifier, sim.crossing_owners)
-                self.assertGreater(follower.current_speed, 0)
-                self.assertLess(follower.current_speed, follower.speed)
+    def test_suivante_tout_droit_entre_en_ralentissant_pendant_virage(self):
+        for virage in ("left", "right"):
+            with self.subTest(virage=virage):
+                simulation = Simulation(debit=0)
+                tete = simulation.ajouter_voiture("N", virage)
+                tete.distance = tete.passage[0] + 70
+                simulation.vehicules_engages.add(tete.identifiant)
+                suivante = simulation.ajouter_voiture("N", "straight")
+                suivante.distance = suivante.passage[0]
+                simulation.avancer(PAS_TEMPS)
+                self.assertIn(suivante.identifiant, simulation.vehicules_engages)
+                self.assertIn(tete.identifiant, simulation.vehicules_engages)
+                self.assertGreater(suivante.vitesse_actuelle, 0)
+                self.assertLess(suivante.vitesse_actuelle, suivante.vitesse)
                 for _ in range(200):
-                    sim.advance(STEP)
-                    self.assert_bodies_do_not_touch(sim)
-                self.assertIsNone(follower.crossing)
+                    simulation.avancer(PAS_TEMPS)
+                    self.verifier_absence_contact(simulation)
+                self.assertIsNone(suivante.passage)
 
-    def test_merge_back_with_close_follower_keeps_both_cars_moving(self):
-        sim = Simulation(rate=0)
-        leader = sim.spawn("N", "straight")
-        leader.distance = leader.crossing[0] - 100
-        leader.lateral_offset = PULL_OVER
-        follower = sim.spawn("N", "straight")
-        follower.distance = leader.distance - 32
-        initial = (leader.distance, follower.distance)
+    def test_reinsertion_avec_suivante_proche_sans_blocage(self):
+        simulation = Simulation(debit=0)
+        tete = simulation.ajouter_voiture("N", "straight")
+        tete.distance = tete.passage[0] - 100
+        tete.decalage_lateral = DECALAGE_RANGEMENT
+        suivante = simulation.ajouter_voiture("N", "straight")
+        suivante.distance = tete.distance - 32
+        initiale = (tete.distance, suivante.distance)
         for _ in range(160):
-            sim.advance(STEP)
-            self.assert_bodies_do_not_touch(sim)
-        self.assertEqual(leader.lateral_offset, 0)
-        self.assertGreater(leader.distance, initial[0] + 100)
-        self.assertGreater(follower.distance, initial[1] + 100)
+            simulation.avancer(PAS_TEMPS)
+            self.verifier_absence_contact(simulation)
+        self.assertEqual(tete.decalage_lateral, 0)
+        self.assertGreater(tete.distance, initiale[0] + 100)
+        self.assertGreater(suivante.distance, initiale[1] + 100)
 
-    def test_car_already_crossing_keeps_clearing_instead_of_parking(self):
-        sim, rescue, car = self.prepared()
-        car.distance = car.crossing[0] + 80
-        car.lateral_offset = PULL_OVER
-        sim.crossing_owners.add(car.identifier)
-        end = car.crossing[1]
+    def test_voiture_deja_engagee_degage_sans_se_ranger(self):
+        simulation, secours, voiture = self.preparer_situation()
+        voiture.distance = voiture.passage[0] + 80
+        voiture.decalage_lateral = DECALAGE_RANGEMENT
+        simulation.vehicules_engages.add(voiture.identifiant)
+        fin = voiture.passage[1]
         for _ in range(160):
-            sim.advance(STEP)
-            self.assert_bodies_do_not_touch(sim)
-            if car.distance >= end:
+            simulation.avancer(PAS_TEMPS)
+            self.verifier_absence_contact(simulation)
+            if voiture.distance >= fin:
                 break
-            self.assertFalse(car.yielding_to)
-            self.assertGreater(car.current_speed, 0)
-        self.assertGreaterEqual(car.distance, end)
+            self.assertFalse(voiture.cede_aux)
+            self.assertGreater(voiture.vitesse_actuelle, 0)
+        self.assertGreaterEqual(voiture.distance, fin)
 
 
 if __name__ == "__main__":

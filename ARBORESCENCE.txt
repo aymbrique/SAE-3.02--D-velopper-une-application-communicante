@@ -26,7 +26,6 @@ SAE302-GitHub/
 │       └── mariadb.py             Acces a la base
 ├── sql/                          Definition des tables
 ├── tests/                        Tests automatiques
-├── exemples/                     Ancienne animation, hors application
 ├── docs/                         Guides et cahier des charges
 ├── config.example.ini            Exemple de configuration
 └── requirements.txt              Bibliotheques Python

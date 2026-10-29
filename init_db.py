@@ -5,17 +5,17 @@ import sys
 
 import pymysql
 
-from src.configuration import database_config, read_config
-from src.stockage.mariadb import MariaDBStore
+from src.configuration import configuration_base, lire_configuration
+from src.stockage.mariadb import StockageMariaDB
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config")
-    args = parser.parse_args()
+    analyseur = argparse.ArgumentParser(description=__doc__)
+    analyseur.add_argument("--config", dest="configuration")
+    arguments = analyseur.parse_args()
     try:
-        store = MariaDBStore(database_config(read_config(args.config)))
-        store.initialize()
+        stockage = StockageMariaDB(configuration_base(lire_configuration(arguments.configuration)))
+        stockage.initialiser()
     except (ValueError, pymysql.MySQLError, OSError) as error:
         print(f"Initialisation impossible : {error}", file=sys.stderr)
         return 1

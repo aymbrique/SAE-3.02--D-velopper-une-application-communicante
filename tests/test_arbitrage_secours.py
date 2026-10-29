@@ -2,87 +2,87 @@
 
 import unittest
 
-from src.simulation.moteur import STEP, Simulation
-from traffic_checks import assert_spacing
+from src.simulation.moteur import PAS_TEMPS, Simulation
+from controles_circulation import verifier_espacement
 
 
-class RescueArbitrationTests(unittest.TestCase):
-    def opposed_rescues(self, axis, older_id):
-        sim = Simulation(rate=0)
-        younger_id = "02" if older_id == "01" else "01"
-        sim.start_mission(older_id, "S" if axis == "NS" else "W")
-        sim.time = 30
-        sim.start_mission(younger_id, "E")
-        older = sim.get_rescue(older_id)
-        younger = sim.get_rescue(younger_id)
-        older.visited = True
-        older.crossing_index = 1
-        younger.visited = axis == "EW"
-        younger.crossing_index = int(younger.visited)
-        for rescue in (older, younger):
-            rescue.distance = rescue.crossing[0]
-        sim.lights.axis = axis
-        return sim, older, younger
+class TestsArbitrageSecours(unittest.TestCase):
+    def preparer_secours_opposes(self, axe, identifiant_ancien):
+        simulation = Simulation(debit=0)
+        identifiant_recent = "02" if identifiant_ancien == "01" else "01"
+        simulation.demarrer_mission(identifiant_ancien, "S" if axe == "NS" else "W")
+        simulation.temps = 30
+        simulation.demarrer_mission(identifiant_recent, "E")
+        ancien = simulation.obtenir_secours(identifiant_ancien)
+        recent = simulation.obtenir_secours(identifiant_recent)
+        ancien.intervention_effectuee = True
+        ancien.indice_passage = 1
+        recent.intervention_effectuee = axe == "EW"
+        recent.indice_passage = int(recent.intervention_effectuee)
+        for secours in (ancien, recent):
+            secours.distance = secours.passage[0]
+        simulation.feux.axe = axe
+        return simulation, ancien, recent
 
-    def finish_in_order(self, sim, first, second):
-        first_end = first.crossing[1]
-        second_stop = second.crossing[0]
-        first_cleared = False
+    def terminer_dans_ordre(self, simulation, premier, second):
+        fin_premier = premier.passage[1]
+        arret_second = second.passage[0]
+        premier_degage = False
         for _ in range(400):
-            sim.advance(STEP)
-            assert_spacing(self, sim)
-            if not first_cleared:
-                self.assertEqual(sim.lights.owner.identifier, first.identifier)
-                self.assertLessEqual(second.distance, second_stop)
-            first_cleared |= first.distance >= first_end or not first.busy
-            if second.identifier in sim.crossing_owners:
-                self.assertTrue(first_cleared)
-                self.assertEqual(sim.lights.owner.identifier, second.identifier)
+            simulation.avancer(PAS_TEMPS)
+            verifier_espacement(self, simulation)
+            if not premier_degage:
+                self.assertEqual(simulation.feux.prioritaire.identifiant, premier.identifiant)
+                self.assertLessEqual(second.distance, arret_second)
+            premier_degage |= premier.distance >= fin_premier or not premier.occupe
+            if second.identifiant in simulation.vehicules_engages:
+                self.assertTrue(premier_degage)
+                self.assertEqual(simulation.feux.prioritaire.identifiant, second.identifiant)
                 break
         else:
             self.fail("Le second secours n'a pas obtenu le passage apres le premier.")
 
-    def test_oldest_mission_wins_on_both_axes_and_with_either_vehicle(self):
-        for axis in ("NS", "EW"):
-            for older_id in ("01", "02"):
-                with self.subTest(axis=axis, older=older_id):
-                    sim, older, younger = self.opposed_rescues(axis, older_id)
-                    self.finish_in_order(sim, older, younger)
+    def test_mission_plus_ancienne_prioritaire_sur_chaque_axe(self):
+        for axe in ("NS", "EW"):
+            for identifiant_ancien in ("01", "02"):
+                with self.subTest(axe=axe, ancien=identifiant_ancien):
+                    simulation, ancien, recent = self.preparer_secours_opposes(axe, identifiant_ancien)
+                    self.terminer_dans_ordre(simulation, ancien, recent)
 
-    def test_two_requests_reconsider_early_single_reservation(self):
-        for axis in ("NS", "EW"):
-            for older_id in ("01", "02"):
-                with self.subTest(axis=axis, older=older_id):
-                    sim, older, younger = self.opposed_rescues(axis, older_id)
-                    older.distance -= 600  # Hors des deux seuils de demande.
-                    younger.distance -= 160
-                    sim.advance(STEP)
-                    self.assertEqual(sim.lights.owner.identifier, younger.identifier)
-                    self.assertFalse(sim.crossing_owners)
-                    older.distance = older.crossing[0]
-                    self.finish_in_order(sim, older, younger)
+    def test_deux_demandes_reexaminent_reservation_precoce(self):
+        for axe in ("NS", "EW"):
+            for identifiant_ancien in ("01", "02"):
+                with self.subTest(axe=axe, ancien=identifiant_ancien):
+                    simulation, ancien, recent = self.preparer_secours_opposes(axe, identifiant_ancien)
+                    ancien.distance -= 600  # Hors des deux seuils de demande.
+                    recent.distance -= 160
+                    simulation.avancer(PAS_TEMPS)
+                    self.assertEqual(simulation.feux.prioritaire.identifiant, recent.identifiant)
+                    self.assertFalse(simulation.vehicules_engages)
+                    ancien.distance = ancien.passage[0]
+                    self.terminer_dans_ordre(simulation, ancien, recent)
 
-    def test_vehicle_already_inside_keeps_control_until_exit(self):
-        for axis in ("NS", "EW"):
-            with self.subTest(axis=axis):
-                sim, older, younger = self.opposed_rescues(axis, "02")
-                older.distance -= 600
-                sim.advance(STEP)
-                self.assertIn(younger.identifier, sim.crossing_owners)
-                older.distance = older.crossing[0]
-                self.finish_in_order(sim, younger, older)
+    def test_secours_deja_engage_garde_priorite_jusqu_a_sortie(self):
+        for axe in ("NS", "EW"):
+            with self.subTest(axe=axe):
+                simulation, ancien, recent = self.preparer_secours_opposes(axe, "02")
+                ancien.distance -= 600
+                simulation.avancer(PAS_TEMPS)
+                self.assertIn(recent.identifiant, simulation.vehicules_engages)
+                ancien.distance = ancien.passage[0]
+                self.terminer_dans_ordre(simulation, recent, ancien)
 
-    def test_returning_vehicle_releases_control_before_reaching_station(self):
-        sim, older, younger = self.opposed_rescues("EW", "02")
-        sim.advance(STEP)
-        self.assertEqual(sim.lights.owner.identifier, older.identifier)
-        end = older.crossing[1]
-        older.distance = end - 1
-        sim.advance(STEP)
-        self.assertIsNone(older.crossing)
-        sim.advance(STEP)
-        self.assertTrue(older.busy)
-        self.assertEqual(sim.lights.owner.identifier, younger.identifier)
+    def test_retour_libere_feux_avant_caserne(self):
+        simulation, ancien, recent = self.preparer_secours_opposes("EW", "02")
+        simulation.avancer(PAS_TEMPS)
+        self.assertEqual(simulation.feux.prioritaire.identifiant, ancien.identifiant)
+        fin = ancien.passage[1]
+        ancien.distance = fin - 1
+        simulation.avancer(PAS_TEMPS)
+        self.assertIsNone(ancien.passage)
+        simulation.avancer(PAS_TEMPS)
+        self.assertTrue(ancien.occupe)
+        self.assertEqual(simulation.feux.prioritaire.identifiant, recent.identifiant)
 
 
 if __name__ == "__main__":

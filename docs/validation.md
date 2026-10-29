@@ -39,7 +39,7 @@ Les régressions se trouvent dans `tests/test_rangement.py` et
 `tests/test_priorite_fluide.py`.
 L'arbitrage face à face est vérifié dans `tests/test_arbitrage_secours.py`.
 La libération des feux pendant les soins est vérifiée dans `tests/test_priorite_parking.py`.
-Les contrôles géométriques communs sont dans `tests/traffic_checks.py`.
+Les contrôles géométriques communs sont dans `tests/controles_circulation.py`.
 
 ## MariaDB
 
@@ -49,8 +49,8 @@ Ils vident les tables de cette base : ne pas leur donner la base du projet.
 Définir SAE_TEST_DB_NAME, SAE_TEST_DB_PASSWORD et, si nécessaire,
 SAE_TEST_DB_HOST, SAE_TEST_DB_PORT et SAE_TEST_DB_USER avant de lancer la suite.
 
-Le rangement des voitures et la réorganisation des fichiers ne changent pas
-les tables ni le protocole TCP. Les essais SQL ne sont pas rejoués pour cette modification.
+Le renommage des classes et attributs ne change ni les tables ni le protocole TCP.
+Sans base de test configurée, les deux essais SQL sont signalés comme ignorés.
 
 ## Essai manuel dans PyCharm
 

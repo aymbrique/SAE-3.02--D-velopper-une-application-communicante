@@ -30,7 +30,6 @@ L'arborescence complète se trouve dans [ARBORESCENCE.txt](ARBORESCENCE.txt).
 | `src/reseau/` | Client, serveur et messages TCP. |
 | `src/stockage/` et `sql/` | Accès MariaDB et tables. |
 | `tests/` | Vérifications automatiques. |
-| `exemples/` | Ancienne animation, conservée à part. |
 
 ## Lancer la simulation seule
 
@@ -45,7 +44,7 @@ Cliquer sur **Démarrer**, choisir le secours et sa destination, puis sur
 **Envoyer en intervention**. Le débit et la vitesse se règlent en haut.
 
 Pour installer le projet sur Debian et utiliser le centre avec MariaDB :
-[guide pour une VM](docs/deploiement-projet.md).
+[guide de déploiement](docs/deploiement-projet.md).
 
 ## Circulation
 

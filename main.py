@@ -5,39 +5,39 @@ import argparse
 
 from PyQt6.QtWidgets import QApplication
 
-from src.interface.fenetre_simulation import MainWindow
-from src.configuration import read_config, network_config
-from src.reseau.client import StateClient
+from src.interface.fenetre_simulation import FenetreSimulation
+from src.configuration import lire_configuration, configuration_reseau
+from src.reseau.client import ClientEtats
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simulation de trafic - connexion TCP locale")
-    parser.add_argument("--config", help="Fichier INI local")
-    parser.add_argument("--host", help="Adresse IP du centre")
-    parser.add_argument("--port", type=int, help="Port TCP du centre")
-    parser.add_argument("--local", action="store_true", help="Simulation sans connexion TCP")
-    args = parser.parse_args()
+    analyseur = argparse.ArgumentParser(description="Simulation de trafic - connexion TCP locale")
+    analyseur.add_argument("--config", dest="configuration", help="Fichier INI local")
+    analyseur.add_argument("--host", dest="hote", help="Adresse IP du centre")
+    analyseur.add_argument("--port", type=int, help="Port TCP du centre")
+    analyseur.add_argument("--local", action="store_true", help="Simulation sans connexion TCP")
+    arguments = analyseur.parse_args()
     try:
-        config = network_config(read_config(args.config))
+        configuration = configuration_reseau(lire_configuration(arguments.configuration))
     except ValueError as error:
-        parser.error(str(error))
-    host = args.host or config["host"]
-    port = args.port if args.port is not None else config["port"]
+        analyseur.error(str(error))
+    hote = arguments.hote or configuration["host"]
+    port = arguments.port if arguments.port is not None else configuration["port"]
     if not 1 <= port <= 65535:
-        parser.error("Port TCP invalide")
-    app = QApplication(sys.argv)
-    app.setApplicationName("SAE302 - Circulation")
-    app.setStyle("Fusion")
+        analyseur.error("Port TCP invalide")
+    application = QApplication(sys.argv)
+    application.setApplicationName("SAE302 - Circulation")
+    application.setStyle("Fusion")
     client = None
-    if not args.local:
-        client = StateClient(host, port)
-        client.publish("01", "disponible")
-        client.publish("02", "disponible")
-        client.start()
-    window = MainWindow(client)
-    window.show()
+    if not arguments.local:
+        client = ClientEtats(hote, port)
+        client.publier("01", "disponible")
+        client.publier("02", "disponible")
+        client.demarrer()
+    fenetre = FenetreSimulation(client)
+    fenetre.show()
 
-    sys.exit(app.exec())
+    sys.exit(application.exec())
 
 
 if __name__ == "__main__":

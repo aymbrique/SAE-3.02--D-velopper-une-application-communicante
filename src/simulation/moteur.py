@@ -3,810 +3,802 @@
 from math import cos, hypot, inf, isfinite, radians, sin
 from random import Random
 
-from src.modeles.plan import (DESTINATIONS, OPPOSITE, METRES_PER_UNIT, PARKING_Y,
-                               SCENE_WIDTH, SCENE_HEIGHT, car_exit, car_route, rescue_route, on_road)
-from src.modeles.vehicules import Frame, Vehicle, VehicleState
-from src.simulation.feux import Lights, Request
-from src.simulation.priorite import (PULL_OVER, beside_rescue,
-                                     bodies_clear, corners)
+from src.modeles.plan import (DESTINATIONS, DIRECTIONS_OPPOSEES, METRES_PAR_UNITE, PARKING_Y,
+                               LARGEUR_SCENE, HAUTEUR_SCENE, sortie_voiture, trajet_voiture, trajet_secours, sur_chaussee)
+from src.modeles.vehicules import EtatSimulation, Vehicule, EtatVehicule
+from src.simulation.feux import Feux, DemandePriorite
+from src.simulation.priorite import (DECALAGE_RANGEMENT, proche_secours,
+                                     carrosseries_separees, coins_carrosserie)
 
-STEP = 0.05  # Duree d'un calcul de deplacement, en secondes simulees.
-GAP = 44.0  # Distance minimale entre les centres des vehicules.
-MAX_CARS = 25
-DWELL = 8.0  # Temps passe sur le lieu de l'intervention.
-RESCUE_SPEED = 56.0  # Plus rapide que les voitures, y compris dans les virages.
-JUNCTION_LOOKAHEAD = 3 * RESCUE_SPEED  # Anticiper la priorite 3 s avant un raccordement.
-TURN_SPEED_FACTOR = 40 / 28  # Degager les virages plus vite que l'allure de croisiere.
+PAS_TEMPS = 0.05  # Duree d'un calcul de deplacement, en secondes simulees.
+DISTANCE_SECURITE = 44.0  # Distance minimale entre les centres des vehicules.
+MAX_VOITURES = 25
+DUREE_INTERVENTION = 8.0  # Temps passe sur le lieu de l'intervention.
+VITESSE_SECOURS = 56.0  # Plus rapide que les voitures, y compris dans les virages.
+ANTICIPATION_RACCORDEMENT = 3 * VITESSE_SECOURS  # Anticiper la priorite 3 s avant un raccordement.
+FACTEUR_VITESSE_VIRAGE = 40 / 28  # Degager les virages plus vite que l'allure de croisiere.
 
 
-def car_parked(vehicle):
-    return vehicle.manoeuvre_start is None and vehicle.lateral_offset >= PULL_OVER - 1e-6
+def voiture_rangee(vehicule):
+    return vehicule.debut_manoeuvre is None and vehicule.decalage_lateral >= DECALAGE_RANGEMENT - 1e-6
 
 
 class Simulation:
-    def __init__(self, rate=12, seed=302):
-        self.random = Random(seed)
-        self.rate = rate
-        self.time = 0.0
-        self.accumulator = 0.0
-        self.spawn_clock = 0.0
-        self.completed = 0
-        self.next_id = 1
-        self.traffic_bounds = (0, 0, SCENE_WIDTH, SCENE_HEIGHT)
-        self.lights = Lights()
-        self.crossing_owners = set()
-        self.junction_conflicts = {}
-        self.crossing_conflicts = {}
-        self.clearing_accesses = set()
-        self.cars = []
-        self.rescues = []
-        self.events = []
-        for identifier, kind, y, color in (("01", "fire", PARKING_Y["01"], "#db6758"),
+    def __init__(self, debit=12, graine=302):
+        self.aleatoire = Random(graine)
+        self.debit = debit
+        self.temps = 0.0
+        self.accumulateur = 0.0
+        self.temps_depuis_arrivee = 0.0
+        self.trajets_termines = 0
+        self.prochain_identifiant = 1
+        self.limites_circulation = (0, 0, LARGEUR_SCENE, HAUTEUR_SCENE)
+        self.feux = Feux()
+        self.vehicules_engages = set()
+        self.conflits_raccordements = {}
+        self.conflits_carrefour = {}
+        self.acces_a_degager = set()
+        self.voitures = []
+        self.secours = []
+        self.evenements = []
+        for identifiant, type_vehicule, y, couleur in (("01", "fire", PARKING_Y["01"], "#db6758"),
                                             ("02", "ambulance", PARKING_Y["02"], "#f8faf9")):
-            route, crossings, hospital = rescue_route(identifier, y)
-            self.rescues.append(Vehicle(identifier, kind, route, crossings, color, RESCUE_SPEED,
-                                        hospital=hospital, total_estimate=route.length / RESCUE_SPEED + DWELL,
-                                        manoeuvre_length=60.0))
+            trajet, passages, arret_intervention = trajet_secours(identifiant, y)
+            self.secours.append(Vehicule(identifiant, type_vehicule, trajet, passages, couleur, VITESSE_SECOURS,
+                                        arret_intervention=arret_intervention, duree_estimee=trajet.longueur / VITESSE_SECOURS + DUREE_INTERVENTION,
+                                        longueur_manoeuvre=60.0))
 
     @property
-    def vehicles(self):
-        return self.cars + self.rescues
+    def vehicules(self):
+        return self.voitures + self.secours
 
-    def get_rescue(self, identifier):
-        for vehicle in self.rescues:
-            if vehicle.identifier == identifier:
-                return vehicle
-        raise ValueError("Secours inconnu : " + identifier)
+    def obtenir_secours(self, identifiant):
+        for vehicule in self.secours:
+            if vehicule.identifiant == identifiant:
+                return vehicule
+        raise ValueError("Secours inconnu : " + identifiant)
 
-    def start_mission(self, identifier, destination="S"):
-        vehicle = self.get_rescue(identifier)
-        if vehicle.busy:
+    def demarrer_mission(self, identifiant, destination="S"):
+        vehicule = self.obtenir_secours(identifiant)
+        if vehicule.occupe:
             return False
-        parking_y = vehicle.route.points[0][1]
-        route, crossings, hospital = rescue_route(identifier, parking_y, destination)
-        vehicle.route = route
-        vehicle.crossings = crossings
-        vehicle.hospital = hospital
-        vehicle.destination = destination
-        vehicle.total_estimate = route.length / vehicle.speed + DWELL
-        vehicle.waiting = False
-        vehicle.busy = True
-        vehicle.started_at = self.time
-        vehicle.distance = 0.0
-        vehicle.crossing_index = 0
-        vehicle.requested_at = None
-        vehicle.lateral_offset = 0.0
-        vehicle.manoeuvre_start = None
-        vehicle.visited = False
-        vehicle.dwell_remaining = 0.0
-        self.events.append((identifier, "occupe"))
+        parking_y = vehicule.trajet.points[0][1]
+        trajet, passages, arret_intervention = trajet_secours(identifiant, parking_y, destination)
+        vehicule.trajet = trajet
+        vehicule.passages = passages
+        vehicule.arret_intervention = arret_intervention
+        vehicule.destination = destination
+        vehicule.duree_estimee = trajet.longueur / vehicule.vitesse + DUREE_INTERVENTION
+        vehicule.en_attente = False
+        vehicule.occupe = True
+        vehicule.debut_mission = self.temps
+        vehicule.distance = 0.0
+        vehicule.indice_passage = 0
+        vehicule.date_demande = None
+        vehicule.decalage_lateral = 0.0
+        vehicule.debut_manoeuvre = None
+        vehicule.intervention_effectuee = False
+        vehicule.temps_intervention_restant = 0.0
+        self.evenements.append((identifiant, "occupe"))
         return True
 
-    def drain_events(self):
-        events = self.events
-        self.events = []
-        return events
+    def recuperer_evenements(self):
+        evenements = self.evenements
+        self.evenements = []
+        return evenements
 
-    def choose_turn(self):
+    def choisir_virage(self):
         # 95 % tout droit ; les 5 % restants sont repartis entre les virages.
-        choice = self.random.randrange(200)
-        if choice < 190:
+        choix = self.aleatoire.randrange(200)
+        if choix < 190:
             return "straight"
-        if choice < 195:
+        if choix < 195:
             return "left"
         return "right"
 
-    def choose_variant(self, origin, turn):
+    def choisir_variante(self, origine, virage):
         # Un trajet sur vingt bifurque au raccordement situe apres le feu.
-        if (origin, turn) in (("N", "straight"), ("E", "left"), ("W", "right")):
-            return "lower_west" if self.random.randrange(20) == 0 else None
-        if (origin, turn) in (("W", "straight"), ("N", "left"), ("S", "right")):
-            return "middle_north" if self.random.randrange(20) == 0 else None
+        if (origine, virage) in (("N", "straight"), ("E", "left"), ("W", "right")):
+            return "lower_west" if self.aleatoire.randrange(20) == 0 else None
+        if (origine, virage) in (("W", "straight"), ("N", "left"), ("S", "right")):
+            return "middle_north" if self.aleatoire.randrange(20) == 0 else None
         return None
 
-    def spawn(self, origin=None, turn=None, *, variant=None):
-        if len(self.cars) >= MAX_CARS:
+    def ajouter_voiture(self, origine=None, virage=None, *, variante=None):
+        if len(self.voitures) >= MAX_VOITURES:
             return None
         # Une arrivee sur deux vient du Nord ; les trois autres se partagent le reste.
-        origin = origin or self.random.choice(("N", "N", "N", "S", "E", "W"))
-        automatic_turn = turn is None
-        turn = turn or self.choose_turn()
-        if automatic_turn and variant is None:
-            variant = self.choose_variant(origin, turn)
-        route, stop = car_route(origin, turn, self.traffic_bounds, variant=variant)
-        x, y, _ = route.sample(0)
-        for other in self.vehicles:
-            other_x, other_y, angle = other.position
-            if hypot(x - other_x, y - other_y) < GAP:
+        origine = origine or self.aleatoire.choice(("N", "N", "N", "S", "E", "W"))
+        virage_automatique = virage is None
+        virage = virage or self.choisir_virage()
+        if virage_automatique and variante is None:
+            variante = self.choisir_variante(origine, virage)
+        trajet, arret = trajet_voiture(origine, virage, self.limites_circulation, variante=variante)
+        x, y, _ = trajet.position_a(0)
+        for autre in self.vehicules:
+            x_autre, y_autre, angle = autre.position
+            if hypot(x - x_autre, y - y_autre) < DISTANCE_SECURITE:
                 return None
-        axis = "NS" if origin in ("N", "S") else "EW"
-        color = self.random.choice(("#5eb9cc", "#e9bc65", "#9a8ed4", "#78b89c", "#e7967f"))
-        vehicle = Vehicle(f"C{self.next_id:04}", "car", route,
-                          ((stop, car_exit(route), axis),), color, 28, origin=origin, turn=turn)
-        self.next_id += 1
-        self.cars.append(vehicle)
-        return vehicle
+        axe = "NS" if origine in ("N", "S") else "EW"
+        couleur = self.aleatoire.choice(("#5eb9cc", "#e9bc65", "#9a8ed4", "#78b89c", "#e7967f"))
+        vehicule = Vehicule(f"C{self.prochain_identifiant:04}", "car", trajet,
+                          ((arret, sortie_voiture(trajet), axe),), couleur, 28, origine=origine, virage=virage)
+        self.prochain_identifiant += 1
+        self.voitures.append(vehicule)
+        return vehicule
 
-    def approach(self, vehicle):
-        if not vehicle.busy or vehicle.crossing is None:
+    def approche(self, vehicule):
+        if not vehicule.occupe or vehicule.passage is None:
             return None, None
-        remaining = max(0.0, vehicle.crossing[0] - vehicle.distance)
-        distance_metres = remaining * METRES_PER_UNIT
-        eta = inf
-        if vehicle.speed > 0:
-            eta = remaining / vehicle.speed
-        return distance_metres, eta
+        temps_restant = max(0.0, vehicule.passage[0] - vehicule.distance)
+        distance_metres = temps_restant * METRES_PAR_UNITE
+        delai_arrivee = inf
+        if vehicule.vitesse > 0:
+            delai_arrivee = temps_restant / vehicule.vitesse
+        return distance_metres, delai_arrivee
 
-    def requests(self):
-        result = []
-        for vehicle in self.rescues:
+    def demandes(self):
+        resultat = []
+        for vehicule in self.secours:
             # Le second passage est le retour : ne pas le reserver en allant
             # au patient, pendant les soins ou encore dans l'allee du parking.
-            if vehicle.crossing_index == 1 and (
-                    not vehicle.visited or vehicle.dwell_remaining > 0
-                    or not on_road(*vehicle.position[:2])):
+            if vehicule.indice_passage == 1 and (
+                    not vehicule.intervention_effectuee or vehicule.temps_intervention_restant > 0
+                    or not sur_chaussee(*vehicule.position[:2])):
                 continue
-            distance, eta = self.approach(vehicle)
-            returning_to_station = self._returning_station(vehicle)
-            at_threshold = distance is not None and (distance <= 150 or eta <= 10)
-            if returning_to_station or at_threshold or self._leaving_station(vehicle):
+            distance, delai_arrivee = self.approche(vehicule)
+            retour_caserne = self._revient_caserne(vehicule)
+            au_seuil = distance is not None and (distance <= 150 or delai_arrivee <= 10)
+            if retour_caserne or au_seuil or self._quitte_caserne(vehicule):
                 # Demander le vert des l'approche, meme si la sortie est encore
                 # occupee. Le controle d'entree impose toujours sa liberation.
-                if vehicle.crossing and vehicle.identifier not in self.crossing_owners:
+                if vehicule.passage and vehicule.identifiant not in self.vehicules_engages:
                     # Deux secours peuvent rejoindre la meme file au retour.
                     # Le suiveur ne doit pas verrouiller le vert devant celui
                     # qui le bloque physiquement et doit passer en premier.
-                    if any(other is not vehicle and other.busy and other.crossing
-                           and other.crossing[2] == vehicle.crossing[2]
-                           and self._blocks_approach(other, vehicle, vehicle.crossing[0])
-                           for other in self.rescues):
+                    if any(autre is not vehicule and autre.occupe and autre.passage
+                           and autre.passage[2] == vehicule.passage[2]
+                           and self._bloque_approche(autre, vehicule, vehicule.passage[0])
+                           for autre in self.secours):
                         continue
-                if vehicle.requested_at is None:
-                    vehicle.requested_at = self.time
-                axis = "NS" if returning_to_station else vehicle.crossing[2]
-                result.append(Request(vehicle.identifier, axis,
-                                      vehicle.started_at, vehicle.requested_at,
-                                      passage=vehicle.crossing_index if at_threshold else None,
-                                      engaged=vehicle.identifier in self.crossing_owners))
-        return result
+                if vehicule.date_demande is None:
+                    vehicule.date_demande = self.temps
+                axe = "NS" if retour_caserne else vehicule.passage[2]
+                resultat.append(DemandePriorite(vehicule.identifiant, axe,
+                                      vehicule.debut_mission, vehicule.date_demande,
+                                      passage=vehicule.indice_passage if au_seuil else None,
+                                      engage=vehicule.identifiant in self.vehicules_engages))
+        return resultat
 
-    def _leaving_station(self, vehicle):
+    def _quitte_caserne(self, vehicule):
         """Des le depart, degager la file Nord avant d'inserer le secours."""
-        if not vehicle.busy or vehicle.visited or vehicle.crossing_index != 0:
+        if not vehicule.occupe or vehicule.intervention_effectuee or vehicule.indice_passage != 0:
             return False
-        station_exit = next(end for _, end, key in vehicle.route.junctions if key == "F")
-        return vehicle.distance < station_exit
+        sortie_caserne = next(fin for _, fin, cle in vehicule.trajet.raccordements if cle == "F")
+        return vehicule.distance < sortie_caserne
 
-    def _returning_station(self, vehicle):
+    def _revient_caserne(self, vehicule):
         """Conserver le vert Nord jusqu'au degagement du retour a la caserne.
 
         Une file Nord au rouge pourrait sinon emprisonner le premier secours
         devant F, boucher la sortie du carrefour et bloquer le second secours.
         """
-        if not vehicle.busy or not vehicle.visited or vehicle.crossing is not None:
+        if not vehicule.occupe or not vehicule.intervention_effectuee or vehicule.passage is not None:
             return False
-        station_end = [end for _, end, key in vehicle.route.junctions if key == "F"][-1]
-        return vehicle.distance < station_end
+        fin_caserne = [fin for _, fin, cle in vehicule.trajet.raccordements if cle == "F"][-1]
+        return vehicule.distance < fin_caserne
 
-    def advance(self, duration):
-        if not isfinite(duration) or duration < 0:
+    def avancer(self, duree):
+        if not isfinite(duree) or duree < 0:
             raise ValueError("Duree invalide")
-        self.accumulator += duration
-        while self.accumulator >= STEP - 1e-9:
-            self._step()
-            self.accumulator -= STEP
+        self.accumulateur += duree
+        while self.accumulateur >= PAS_TEMPS - 1e-9:
+            self._avancer_un_pas()
+            self.accumulateur -= PAS_TEMPS
 
-    def _step(self):
-        self.time += STEP
-        self._update_clearing_accesses()
-        self._update_yielding()
-        self._update_rescue_lanes()
-        rescue_busy = False
-        for rescue in self.rescues:
-            if rescue.busy:
-                rescue_busy = True
-        self.lights.advance(STEP, self.requests(), rescue_busy,
-                            not self.crossing_owners)
-        if self.rate > 0:
-            self.spawn_clock += STEP
-            if self.spawn_clock >= 60 / self.rate:
-                self.spawn_clock %= 60 / self.rate
-                self.spawn()
+    def _avancer_un_pas(self):
+        self.temps += PAS_TEMPS
+        self._actualiser_acces_a_degager()
+        self._actualiser_rangement()
+        self._actualiser_voies_secours()
+        secours_occupe = False
+        for secours in self.secours:
+            if secours.occupe:
+                secours_occupe = True
+        self.feux.avancer(PAS_TEMPS, self.demandes(), secours_occupe,
+                            not self.vehicules_engages)
+        if self.debit > 0:
+            self.temps_depuis_arrivee += PAS_TEMPS
+            if self.temps_depuis_arrivee >= 60 / self.debit:
+                self.temps_depuis_arrivee %= 60 / self.debit
+                self.ajouter_voiture()
         # Degager le carrefour en premier, puis les vehicules en tete de file.
-        ordered = sorted(self.vehicles, key=self._movement_order)
-        for vehicle in ordered:
-            self._move(vehicle)
-        remaining_cars = []
-        for car in self.cars:
-            if car.distance >= car.route.length - 1e-6:
-                self.completed += 1
+        ordonnes = sorted(self.vehicules, key=self._ordre_deplacement)
+        for vehicule in ordonnes:
+            self._deplacer(vehicule)
+        voitures_restantes = []
+        for voiture in self.voitures:
+            if voiture.distance >= voiture.trajet.longueur - 1e-6:
+                self.trajets_termines += 1
             else:
-                remaining_cars.append(car)
-        self.cars = remaining_cars
+                voitures_restantes.append(voiture)
+        self.voitures = voitures_restantes
 
-    def _movement_order(self, vehicle):
+    def _ordre_deplacement(self, vehicule):
         # Degager d'abord les sorties aussi : un leader deja sorti doit avancer
         # avant la voiture qui le suit encore dans le carrefour, sans micro-arret.
-        clearing = (vehicle.identifier in self.crossing_owners
-                    or (vehicle.kind == "car" and vehicle.crossing is None))
-        return (not clearing, -vehicle.distance, vehicle.identifier)
+        degage = (vehicule.identifiant in self.vehicules_engages
+                    or (vehicule.type_vehicule == "car" and vehicule.passage is None))
+        return (not degage, -vehicule.distance, vehicule.identifiant)
 
-    def _position(self, vehicle, distance, offset=None):
-        return vehicle.position_at(distance, offset)
+    def _position(self, vehicule, distance, decalage=None):
+        return vehicule.position_a(distance, decalage)
 
-    def _opposite_station_moves(self, first, second):
+    def _mouvements_opposes_caserne(self, premier, second):
         """Un retour et un depart utilisent deux voies distinctes dans l'allee."""
-        if (first.kind == "car" or second.kind == "car"
-                or not first.busy or not second.busy or first.visited == second.visited):
+        if (premier.type_vehicule == "car" or second.type_vehicule == "car"
+                or not premier.occupe or not second.occupe or premier.intervention_effectuee == second.intervention_effectuee):
             return False
-        return all(any(key == "parking" and stop <= vehicle.distance < end
-                       for stop, end, key in vehicle.route.junctions)
-                   for vehicle in (first, second))
+        return all(any(cle == "parking" and arret <= vehicule.distance < fin
+                       for arret, fin, cle in vehicule.trajet.raccordements)
+                   for vehicule in (premier, second))
 
-    def pair_clear(self, first, second, position=None, other_position=None):
-        position = first.position if position is None else position
-        other_position = second.position if other_position is None else other_position
-        distance = hypot(position[0] - other_position[0], position[1] - other_position[1])
-        if distance >= GAP - 1e-7:
+    def vehicules_separes(self, premier, second, position=None, position_autre=None):
+        position = premier.position if position is None else position
+        position_autre = second.position if position_autre is None else position_autre
+        distance = hypot(position[0] - position_autre[0], position[1] - position_autre[1])
+        if distance >= DISTANCE_SECURITE - 1e-7:
             return True
-        if self._opposite_station_moves(first, second):
-            return bodies_clear(first, position, second, other_position)
-        if abs(first.lateral_offset) > 1e-6 or abs(second.lateral_offset) > 1e-6:
-            return bodies_clear(first, position, second, other_position)
+        if self._mouvements_opposes_caserne(premier, second):
+            return carrosseries_separees(premier, position, second, position_autre)
+        if abs(premier.decalage_lateral) > 1e-6 or abs(second.decalage_lateral) > 1e-6:
+            return carrosseries_separees(premier, position, second, position_autre)
         # Apres une reinsertion, un ecart deja court ne doit pas emprisonner
         # le vehicule de tete : il peut s'eloigner en gardant les gabarits libres.
-        previous = hypot(first.position[0] - second.position[0],
-                         first.position[1] - second.position[1])
-        escaping = distance > previous + 1e-7
-        unchanged_rescue = ((first.kind != "car" or second.kind != "car")
-                            and distance >= previous - 1e-7)
-        return ((escaping or unchanged_rescue)
-                and bodies_clear(first, position, second, other_position))
+        precedent = hypot(premier.position[0] - second.position[0],
+                         premier.position[1] - second.position[1])
+        s_eloigne = distance > precedent + 1e-7
+        secours_sans_rapprochement = ((premier.type_vehicule != "car" or second.type_vehicule != "car")
+                            and distance >= precedent - 1e-7)
+        return ((s_eloigne or secours_sans_rapprochement)
+                and carrosseries_separees(premier, position, second, position_autre))
 
-    def _clear_position(self, vehicle, position, ignored=()):
-        for other in self.vehicles:
-            if other is vehicle or other.identifier in ignored:
+    def _position_libre(self, vehicule, position, ignores=()):
+        for autre in self.vehicules:
+            if autre is vehicule or autre.identifiant in ignores:
                 continue
-            if not self.pair_clear(vehicle, other, position):
+            if not self.vehicules_separes(vehicule, autre, position):
                 return False
         return True
 
-    def _clear_path(self, vehicle, target, ignored=()):
-        position = self._position(vehicle, target)
-        if vehicle.manoeuvre_start is not None:
-            if not all(on_road(x, y) for x, y in corners(vehicle, position)):
+    def _trajet_libre(self, vehicule, cible, ignores=()):
+        position = self._position(vehicule, cible)
+        if vehicule.debut_manoeuvre is not None:
+            if not all(sur_chaussee(x, y) for x, y in coins_carrosserie(vehicule, position)):
                 return False
-        return self._clear_position(vehicle, position, ignored)
+        return self._position_libre(vehicule, position, ignores)
 
-    def _can_pull_over(self, car):
-        if car.identifier in self.crossing_owners or car.speed <= 0:
+    def _peut_se_ranger(self, voiture):
+        if voiture.identifiant in self.vehicules_engages or voiture.vitesse <= 0:
             return False
-        end = car.distance + car.manoeuvre_length
-        if car.crossing and car.distance <= car.crossing[0] < end - 1e-6:
+        fin = voiture.distance + voiture.longueur_manoeuvre
+        if voiture.passage and voiture.distance <= voiture.passage[0] < fin - 1e-6:
             return False
-        _, _, before = car.route.sample(car.distance)
-        for distance in (car.distance + 20, car.distance + 40, end):
-            _, _, after = car.route.sample(distance)
-            if cos(radians(before - after)) < .995:
+        _, _, avant = voiture.trajet.position_a(voiture.distance)
+        for distance in (voiture.distance + 20, voiture.distance + 40, fin):
+            _, _, apres = voiture.trajet.position_a(distance)
+            if cos(radians(avant - apres)) < .995:
                 return False
         # Ne jamais se garer au milieu d'un raccordement.
-        return not any(stop < end and car.distance < finish
-                       for stop, finish, _ in car.route.junctions)
+        return not any(arret < fin and voiture.distance < arrivee
+                       for arret, arrivee, _ in voiture.trajet.raccordements)
 
-    def _update_yielding(self):
-        for car in self.cars:
-            nearby = tuple(rescue.identifier for rescue in self.rescues
-                           if beside_rescue(car, rescue))
-            in_junction = any(stop < car.distance < end
-                              for stop, end, _ in car.route.junctions)
-            can_park = (car.identifier not in self.crossing_owners and not in_junction
-                        and (self._can_pull_over(car) or car.lateral_offset > 0
-                             or (car.manoeuvre_start is not None
-                                 and car.manoeuvre_target == PULL_OVER)))
-            car.yielding_to = nearby if can_park else ()
-            target = PULL_OVER if car.yielding_to else 0.0
-            if (car.manoeuvre_start is not None
-                    or abs(car.lateral_offset - target) < 1e-9):
+    def _actualiser_rangement(self):
+        for voiture in self.voitures:
+            proches = tuple(secours.identifiant for secours in self.secours
+                           if proche_secours(voiture, secours))
+            dans_raccordement = any(arret < voiture.distance < fin
+                              for arret, fin, _ in voiture.trajet.raccordements)
+            peut_se_ranger = (voiture.identifiant not in self.vehicules_engages and not dans_raccordement
+                        and (self._peut_se_ranger(voiture) or voiture.decalage_lateral > 0
+                             or (voiture.debut_manoeuvre is not None
+                                 and voiture.decalage_cible == DECALAGE_RANGEMENT)))
+            voiture.cede_aux = proches if peut_se_ranger else ()
+            cible = DECALAGE_RANGEMENT if voiture.cede_aux else 0.0
+            if (voiture.debut_manoeuvre is not None
+                    or abs(voiture.decalage_lateral - cible) < 1e-9):
                 continue
-            if target == 0 and not self._merge_has_room(car):
+            if cible == 0 and not self._reinsertion_possible(voiture):
                 continue
-            car.manoeuvre_start = car.distance
-            car.manoeuvre_from = car.lateral_offset
-            car.manoeuvre_target = target
-            if not all(on_road(x, y)
-                       for distance in range(0, int(car.manoeuvre_length) + 1, 3)
-                       for x, y in corners(car, car.position_at(car.distance + distance))):
-                car.manoeuvre_start = None
-                if target:
-                    car.yielding_to = ()
+            voiture.debut_manoeuvre = voiture.distance
+            voiture.decalage_initial = voiture.decalage_lateral
+            voiture.decalage_cible = cible
+            if not all(sur_chaussee(x, y)
+                       for distance in range(0, int(voiture.longueur_manoeuvre) + 1, 3)
+                       for x, y in coins_carrosserie(voiture, voiture.position_a(voiture.distance + distance))):
+                voiture.debut_manoeuvre = None
+                if cible:
+                    voiture.cede_aux = ()
 
-    def _merge_has_room(self, car):
-        x, y, heading = car.route.sample(car.distance)
-        dx, dy = cos(radians(heading)), sin(radians(heading))
-        for rescue in self.rescues:
-            if not rescue.busy:
+    def _reinsertion_possible(self, voiture):
+        x, y, orientation = voiture.trajet.position_a(voiture.distance)
+        dx, dy = cos(radians(orientation)), sin(radians(orientation))
+        for secours in self.secours:
+            if not secours.occupe:
                 continue
-            rx, ry, other_heading = rescue.route.sample(rescue.distance)
-            ahead = (x - rx) * dx + (y - ry) * dy
-            lateral = abs((x - rx) * dy - (y - ry) * dx)
-            if (cos(radians(heading - other_heading)) > .96
-                    and -45 < ahead < 80 and lateral < 40):
+            rx, ry, orientation_autre = secours.trajet.position_a(secours.distance)
+            avance_relative = (x - rx) * dx + (y - ry) * dy
+            ecart_lateral = abs((x - rx) * dy - (y - ry) * dx)
+            if (cos(radians(orientation - orientation_autre)) > .96
+                    and -45 < avance_relative < 80 and ecart_lateral < 40):
                 return False
         return True
 
-    def _update_rescue_lanes(self):
+    def _actualiser_voies_secours(self):
         """Seul le secours peut emprunter le milieu de la route pour depasser."""
-        active = [rescue for rescue in self.rescues if rescue.busy]
-        passing = min(active, key=lambda rescue: (rescue.started_at, rescue.identifier),
+        actifs = [secours for secours in self.secours if secours.occupe]
+        depassant = min(actifs, key=lambda secours: (secours.debut_mission, secours.identifiant),
                       default=None)
-        for rescue in active:
-            x, y, heading = rescue.route.sample(rescue.distance)
-            dx, dy = cos(radians(heading)), sin(radians(heading))
-            target = 0.0
-            if rescue is passing and not rescue.dwell_remaining:
-                for car in self.cars:
-                    ox, oy, other_heading = car.position
-                    ahead = (ox - x) * dx + (oy - y) * dy
-                    lateral = abs((ox - x) * dy - (oy - y) * dx)
-                    if (cos(radians(heading - other_heading)) > .8
-                            and -45 < ahead < 180 and lateral < PULL_OVER - .5):
-                        target = -PULL_OVER
+        for secours in actifs:
+            x, y, orientation = secours.trajet.position_a(secours.distance)
+            dx, dy = cos(radians(orientation)), sin(radians(orientation))
+            cible = 0.0
+            if secours is depassant and not secours.temps_intervention_restant:
+                for voiture in self.voitures:
+                    ox, oy, orientation_autre = voiture.position
+                    avance_relative = (ox - x) * dx + (oy - y) * dy
+                    ecart_lateral = abs((ox - x) * dy - (oy - y) * dx)
+                    if (cos(radians(orientation - orientation_autre)) > .8
+                            and -45 < avance_relative < 180 and ecart_lateral < DECALAGE_RANGEMENT - .5):
+                        cible = -DECALAGE_RANGEMENT
                         break
             # Garder aussi la place de reintegrer sa voie avant le prochain virage.
-            if target and any(stop - 4 * rescue.manoeuvre_length <= rescue.distance < end
-                              for stop, end, _ in (*rescue.route.junctions, *rescue.crossings)):
-                target = 0.0
-            if target and any(cos(radians(heading - rescue.route.sample(
-                    rescue.distance + offset)[2])) < .995 for offset in (30, 60, 90, 120)):
-                target = 0.0
-            if rescue.manoeuvre_start is not None:
+            if cible and any(arret - 4 * secours.longueur_manoeuvre <= secours.distance < fin
+                              for arret, fin, _ in (*secours.trajet.raccordements, *secours.passages)):
+                cible = 0.0
+            if cible and any(cos(radians(orientation - secours.trajet.position_a(
+                    secours.distance + decalage)[2])) < .995 for decalage in (30, 60, 90, 120)):
+                cible = 0.0
+            if secours.debut_manoeuvre is not None:
                 continue
-            if rescue.manoeuvre_start is None and abs(rescue.lateral_offset - target) < 1e-9:
+            if secours.debut_manoeuvre is None and abs(secours.decalage_lateral - cible) < 1e-9:
                 continue
-            previous = (rescue.manoeuvre_start, rescue.manoeuvre_from, rescue.manoeuvre_target)
-            rescue.manoeuvre_start = rescue.distance
-            rescue.manoeuvre_from = rescue.lateral_offset
-            rescue.manoeuvre_target = target
-            if target and not all(on_road(px, py)
-                                  for offset in (15, 30, 45, 60)
-                                  for px, py in corners(rescue, rescue.position_at(rescue.distance + offset))):
-                rescue.manoeuvre_start, rescue.manoeuvre_from, rescue.manoeuvre_target = previous
+            precedent = (secours.debut_manoeuvre, secours.decalage_initial, secours.decalage_cible)
+            secours.debut_manoeuvre = secours.distance
+            secours.decalage_initial = secours.decalage_lateral
+            secours.decalage_cible = cible
+            if cible and not all(sur_chaussee(px, py)
+                                  for decalage in (15, 30, 45, 60)
+                                  for px, py in coins_carrosserie(secours, secours.position_a(secours.distance + decalage))):
+                secours.debut_manoeuvre, secours.decalage_initial, secours.decalage_cible = precedent
 
-    def _update_clearing_accesses(self):
-        keys = {key for rescue in self.rescues if rescue.busy
-                for stop, end, key in rescue.route.junctions
-                if (rescue.distance < end and (stop - rescue.distance <= JUNCTION_LOOKAHEAD
-                    or key == "F" and self._leaving_station(rescue)))}
-        self.clearing_accesses = {
-            vehicle.identifier for vehicle in self.vehicles
-            if (vehicle.kind == "car" or vehicle.busy)
-            and any(key in keys and (stop < vehicle.distance < end
-                    or vehicle.kind != "car" and stop == vehicle.distance)
-                    for stop, end, key in vehicle.route.junctions)}
+    def _actualiser_acces_a_degager(self):
+        cles = {cle for secours in self.secours if secours.occupe
+                for arret, fin, cle in secours.trajet.raccordements
+                if (secours.distance < fin and (arret - secours.distance <= ANTICIPATION_RACCORDEMENT
+                    or cle == "F" and self._quitte_caserne(secours)))}
+        self.acces_a_degager = {
+            vehicule.identifiant for vehicule in self.vehicules
+            if (vehicule.type_vehicule == "car" or vehicule.occupe)
+            and any(cle in cles and (arret < vehicule.distance < fin
+                    or vehicule.type_vehicule != "car" and arret == vehicule.distance)
+                    for arret, fin, cle in vehicule.trajet.raccordements)}
 
-    def _clears_access_queue(self, vehicle):
+    def _degage_file_acces(self, vehicule):
         """Degager une file encore engagee dans un carrefour ou un acces de secours."""
-        x, y, heading = vehicle.route.sample(vehicle.distance)
-        dx, dy = cos(radians(heading)), sin(radians(heading))
-        for other in self.vehicles:
-            if other.kind != "car" and other.identifier not in self.clearing_accesses:
+        x, y, orientation = vehicule.trajet.position_a(vehicule.distance)
+        dx, dy = cos(radians(orientation)), sin(radians(orientation))
+        for autre in self.vehicules:
+            if autre.type_vehicule != "car" and autre.identifiant not in self.acces_a_degager:
                 continue
-            manoeuvring = (other.kind == "car" and other.manoeuvre_start is not None
-                            and other.manoeuvre_target == PULL_OVER)
-            if (other is vehicle or not manoeuvring and other.identifier not in (
-                    self.crossing_owners | self.clearing_accesses)):
+            en_manoeuvre = (autre.type_vehicule == "car" and autre.debut_manoeuvre is not None
+                            and autre.decalage_cible == DECALAGE_RANGEMENT)
+            if (autre is vehicule or not en_manoeuvre and autre.identifiant not in (
+                    self.vehicules_engages | self.acces_a_degager)):
                 continue
-            reference = other.distance
-            if other.kind != "car":
+            reference = autre.distance
+            if autre.type_vehicule != "car":
                 # Un secours qui s'insere regarde la voie a la sortie de sa courbe.
-                reference = next((end for stop, end, _ in other.route.junctions
-                                  if stop <= other.distance < end), reference)
-            ox, oy, other_heading = other.route.sample(reference)
-            ahead = (x - ox) * dx + (y - oy) * dy
-            lateral = abs((x - ox) * dy - (y - oy) * dx)
-            minimum = -GAP if reference != other.distance else 0.0
-            if (cos(radians(heading - other_heading)) > .96
-                    and minimum < ahead < MAX_CARS * GAP and lateral < 18):
+                reference = next((fin for arret, fin, _ in autre.trajet.raccordements
+                                  if arret <= autre.distance < fin), reference)
+            ox, oy, orientation_autre = autre.trajet.position_a(reference)
+            avance_relative = (x - ox) * dx + (y - oy) * dy
+            ecart_lateral = abs((x - ox) * dy - (y - oy) * dx)
+            minimum = -DISTANCE_SECURITE if reference != autre.distance else 0.0
+            if (cos(radians(orientation - orientation_autre)) > .96
+                    and minimum < avance_relative < MAX_VOITURES * DISTANCE_SECURITE and ecart_lateral < 18):
                 return True
         return False
 
-    def _follow_queue(self, vehicle, target):
+    def _suivre_file(self, vehicule, cible):
         """Conserver l'ordre de la file, meme si son leader est range au bord."""
-        x, y, heading = vehicle.route.sample(vehicle.distance)
-        dx, dy = cos(radians(heading)), sin(radians(heading))
-        for other in self.cars:
-            if other is vehicle:
+        x, y, orientation = vehicule.trajet.position_a(vehicule.distance)
+        dx, dy = cos(radians(orientation)), sin(radians(orientation))
+        for autre in self.voitures:
+            if autre is vehicule:
                 continue
-            if vehicle.kind != "car" and not (other.manoeuvre_start is not None
-                                               and other.manoeuvre_target == 0):
+            if vehicule.type_vehicule != "car" and not (autre.debut_manoeuvre is not None
+                                               and autre.decalage_cible == 0):
                 continue
             # La voie habituelle reste reservee au leader pendant sa manoeuvre.
-            ox, oy, other_heading = other.route.sample(other.distance)
-            if cos(radians(heading - other_heading)) < .96:
+            ox, oy, orientation_autre = autre.trajet.position_a(autre.distance)
+            if cos(radians(orientation - orientation_autre)) < .96:
                 continue
-            ahead = (ox - x) * dx + (oy - y) * dy
-            lateral = abs((ox - x) * dy - (oy - y) * dx)
-            if 0 < ahead < GAP + 150 and lateral < 18:
-                target = min(target, vehicle.distance + max(0.0, ahead - GAP))
-        return target
+            avance_relative = (ox - x) * dx + (oy - y) * dy
+            ecart_lateral = abs((ox - x) * dy - (oy - y) * dx)
+            if 0 < avance_relative < DISTANCE_SECURITE + 150 and ecart_lateral < 18:
+                cible = min(cible, vehicule.distance + max(0.0, avance_relative - DISTANCE_SECURITE))
+        return cible
 
-    def can_share_crossing(self, first, second):
+    def passages_compatibles(self, premier, second):
         """Suivi tout droit et mouvements opposes sans croisement de trajectoire."""
-        if (first.kind == "car") != (second.kind == "car"):
+        if (premier.type_vehicule == "car") != (second.type_vehicule == "car"):
             return True  # Le secours se guide sur les carrosseries, sans reserver tout le carrefour.
-        if first.kind != "car" or first.origin not in OPPOSITE:
+        if premier.type_vehicule != "car" or premier.origine not in DIRECTIONS_OPPOSEES:
             return False
-        if second.origin == first.origin:
+        if second.origine == premier.origine:
             return True
-        return (second.origin == OPPOSITE[first.origin]
-                and first.turn in ("straight", "right")
-                and second.turn in ("straight", "right"))
+        return (second.origine == DIRECTIONS_OPPOSEES[premier.origine]
+                and premier.virage in ("straight", "right")
+                and second.virage in ("straight", "right"))
 
-    def _exit_clear(self, vehicle):
-        stop, end, axis = vehicle.crossing
-        departed = self._departed_crossing(vehicle, end)
-        for offset in range(0, 46, 6):
-            if not self._clear_path(vehicle, end + offset, departed):
-                return False
-        return True
-
-    def _following_exit(self, vehicle, end, other, other_end):
+    def _suit_sortie(self, vehicule, fin, autre, fin_autre):
         """Un leader deja sorti peut etre suivi dans la meme voie, a distance."""
-        if other.distance < other_end or other.speed <= 0 or other.waiting:
+        if autre.distance < fin_autre or autre.vitesse <= 0 or autre.en_attente:
             return False
-        x, y, heading = vehicle.route.sample(end)
-        ox, oy, other_heading = other.position
-        dx, dy = cos(radians(heading)), sin(radians(heading))
-        same_heading = cos(radians(other_heading - heading)) > 0.999
-        ahead = (ox - x) * dx + (oy - y) * dy
-        lateral = abs((ox - x) * dy - (oy - y) * dx)
-        return same_heading and ahead >= 0 and lateral < 1e-6
+        x, y, orientation = vehicule.trajet.position_a(fin)
+        ox, oy, orientation_autre = autre.position
+        dx, dy = cos(radians(orientation)), sin(radians(orientation))
+        meme_orientation = cos(radians(orientation_autre - orientation)) > 0.999
+        avance_relative = (ox - x) * dx + (oy - y) * dy
+        ecart_lateral = abs((ox - x) * dy - (oy - y) * dx)
+        return meme_orientation and avance_relative >= 0 and ecart_lateral < 1e-6
 
-    def _departed_crossing(self, vehicle, end):
-        departed = set()
-        for other in self.vehicles:
-            if other is vehicle or other.identifier in self.crossing_owners:
+    def _vehicules_sortis(self, vehicule, fin):
+        sortis = set()
+        for autre in self.vehicules:
+            if autre is vehicule or autre.identifiant in self.vehicules_engages:
                 continue
-            for _, other_end, _ in other.crossings:
-                if self._following_exit(vehicle, end, other, other_end):
-                    departed.add(other.identifier)
+            for _, fin_autre, _ in autre.passages:
+                if self._suit_sortie(vehicule, fin, autre, fin_autre):
+                    sortis.add(autre.identifiant)
                     break
-        return departed
+        return sortis
 
-    def _can_enter(self, vehicle):
-        stop, end, axis = vehicle.crossing
-        if vehicle.kind == "car" and vehicle.lateral_offset == 0:
-            for other in self.cars:
-                if (other is not vehicle and other.origin == vehicle.origin
-                        and other.lateral_offset > 0 and not other.yielding_to
-                        and vehicle.distance - 28 < other.distance < vehicle.distance + 150):
+    def _peut_entrer(self, vehicule):
+        arret, fin, axe = vehicule.passage
+        if vehicule.type_vehicule == "car" and vehicule.decalage_lateral == 0:
+            for autre in self.voitures:
+                if (autre is not vehicule and autre.origine == vehicule.origine
+                        and autre.decalage_lateral > 0 and not autre.cede_aux
+                        and vehicule.distance - 28 < autre.distance < vehicule.distance + 150):
                     return False  # Laisser la voiture rangee reintegrer sa file.
-        for other in self.vehicles:
-            if other.identifier in self.crossing_owners and other is not vehicle:
-                if not self.can_share_crossing(vehicle, other):
+        for autre in self.vehicules:
+            if autre.identifiant in self.vehicules_engages and autre is not vehicule:
+                if not self.passages_compatibles(vehicule, autre):
                     return False
-                if (vehicle.kind != "car" and other.kind == "car"
-                        and self._crossing_conflict_ahead(vehicle, other)):
+                if (vehicule.type_vehicule != "car" and autre.type_vehicule == "car"
+                        and self._conflit_devant_carrefour(vehicule, autre)):
                     return False
-                if vehicle.lateral_offset > 0 or other.lateral_offset > 0:
-                    point = self._position(vehicle, vehicle.distance + vehicle.speed * STEP)
-                    ox, oy, _ = other.position
-                    if hypot(point[0] - ox, point[1] - oy) < GAP - 1e-7:
+                if vehicule.decalage_lateral > 0 or autre.decalage_lateral > 0:
+                    point = self._position(vehicule, vehicule.distance + vehicule.vitesse * PAS_TEMPS)
+                    ox, oy, _ = autre.position
+                    if hypot(point[0] - ox, point[1] - oy) < DISTANCE_SECURITE - 1e-7:
                         return False
-        if self.lights.signal(axis) != "green":
+        if self.feux.signal(axe) != "green":
             return False
-        if vehicle.kind == "car" and self.lights.owner:
-            rescue = self.get_rescue(self.lights.owner.identifier)
-            if rescue.crossing and not self._blocks_approach(vehicle, rescue, rescue.crossing[0]):
+        if vehicule.type_vehicule == "car" and self.feux.prioritaire:
+            secours = self.obtenir_secours(self.feux.prioritaire.identifiant)
+            if secours.passage and not self._bloque_approche(vehicule, secours, secours.passage[0]):
                 return False
-        if vehicle.kind != "car" and self.lights.owner and self.lights.owner.identifier != vehicle.identifier:
+        if vehicule.type_vehicule != "car" and self.feux.prioritaire and self.feux.prioritaire.identifiant != vehicule.identifiant:
             return False
-        if vehicle.kind != "car":
+        if vehicule.type_vehicule != "car":
             # Un obstacle lointain ou dans une autre branche ne ferme pas l'entree.
             # Chaque pas reste soumis au controle de collision des carrosseries.
-            return self._clear_path(vehicle, vehicle.distance + min(.05, vehicle.speed * STEP))
+            return self._trajet_libre(vehicule, vehicule.distance + min(.05, vehicule.vitesse * PAS_TEMPS))
         # Une voiture deja engagee et en mouvement ne bouche pas tout le trajet
         # des suivantes tout droit. Cela vaut aussi lorsqu'elle vient de sortir.
         # Les vehicules arretes, les virages et les secours restent des obstacles.
-        following = self._departed_crossing(vehicle, end)
-        for other in self.vehicles:
-            if (other is not vehicle and self.can_share_crossing(vehicle, other)
-                    and other.speed > 0 and not other.waiting
-                    and other.distance > other.crossings[0][0]):
-                following.add(other.identifier)
+        suivants = self._vehicules_sortis(vehicule, fin)
+        for autre in self.vehicules:
+            if (autre is not vehicule and self.passages_compatibles(vehicule, autre)
+                    and autre.vitesse > 0 and not autre.en_attente
+                    and autre.distance > autre.passages[0][0]):
+                suivants.add(autre.identifiant)
         # Ce controle global reserve toujours une sortie non bouchee. Le controle
-        # de chaque deplacement dans _move ne saute aucun vehicule : GAP reste
+        # de chaque deplacement dans _deplacer ne saute aucun vehicule : DISTANCE_SECURITE reste
         # obligatoire, meme avec plusieurs voitures engagees sur la meme voie.
-        for offset in range(0, int(end - stop) + 46, 6):
-            if not self._clear_path(vehicle, stop + offset, following):
+        for decalage in range(0, int(fin - arret) + 46, 6):
+            if not self._trajet_libre(vehicule, arret + decalage, suivants):
                 return False
         return True
 
-    def _crossing_conflict_ahead(self, rescue, car):
+    def _conflit_devant_carrefour(self, secours, voiture):
         """Ne pas couper la manoeuvre d'une voiture deja engagee au carrefour."""
-        stop, end, _ = rescue.crossing
-        car_stop, car_end, _ = car.crossing
-        incoming, outgoing = rescue.route.sample(stop), rescue.route.sample(end)
-        car_incoming, car_outgoing = car.route.sample(car_stop), car.route.sample(car_end)
-        if all(hypot(first[0] - second[0], first[1] - second[1]) < 1
-               and cos(radians(first[2] - second[2])) > .999
-               for first, second in ((incoming, car_incoming), (outgoing, car_outgoing))):
+        arret, fin, _ = secours.passage
+        arret_voiture, fin_voiture, _ = voiture.passage
+        entree_direction, sortie_direction = secours.trajet.position_a(arret), secours.trajet.position_a(fin)
+        entree_voiture, sortie_voiture = voiture.trajet.position_a(arret_voiture), voiture.trajet.position_a(fin_voiture)
+        if all(hypot(premier[0] - second[0], premier[1] - second[1]) < 1
+               and cos(radians(premier[2] - second[2])) > .999
+               for premier, second in ((entree_direction, entree_voiture), (sortie_direction, sortie_voiture))):
             return False  # Le suivi dans la meme voie reste possible, a distance.
-        manoeuvre = ((car.manoeuvre_start - car_stop, car.manoeuvre_from,
-                      car.manoeuvre_target, car.manoeuvre_length)
-                     if car.manoeuvre_start is not None else (None, car.lateral_offset))
-        key = (incoming, outgoing, car_incoming, car_outgoing, manoeuvre)
-        if key not in self.crossing_conflicts:
-            path = [rescue.position_at(stop + offset)
-                    for offset in range(0, int(end - stop) + 45, 3)]
-            last = -inf
-            for offset in range(0, int(car_end - car_stop) + 45, 3):
-                position = car.position_at(car_stop + offset)
-                if any(hypot(position[0] - point[0], position[1] - point[1]) < GAP
-                       and not bodies_clear(rescue, point, car, position) for point in path):
-                    last = offset + 3
-            self.crossing_conflicts[key] = last
-        return car.distance - car_stop <= self.crossing_conflicts[key]
+        manoeuvre = ((voiture.debut_manoeuvre - arret_voiture, voiture.decalage_initial,
+                      voiture.decalage_cible, voiture.longueur_manoeuvre)
+                     if voiture.debut_manoeuvre is not None else (None, voiture.decalage_lateral))
+        cle = (entree_direction, sortie_direction, entree_voiture, sortie_voiture, manoeuvre)
+        if cle not in self.conflits_carrefour:
+            chemin = [secours.position_a(arret + decalage)
+                    for decalage in range(0, int(fin - arret) + 45, 3)]
+            dernier = -inf
+            for decalage in range(0, int(fin_voiture - arret_voiture) + 45, 3):
+                position = voiture.position_a(arret_voiture + decalage)
+                if any(hypot(position[0] - point[0], position[1] - point[1]) < DISTANCE_SECURITE
+                       and not carrosseries_separees(secours, point, voiture, position) for point in chemin):
+                    dernier = decalage + 3
+            self.conflits_carrefour[cle] = dernier
+        return voiture.distance - arret_voiture <= self.conflits_carrefour[cle]
 
-    def _move(self, vehicle):
-        vehicle.current_speed = 0.0
-        if vehicle.kind != "car" and not vehicle.busy:
+    def _deplacer(self, vehicule):
+        vehicule.vitesse_actuelle = 0.0
+        if vehicule.type_vehicule != "car" and not vehicule.occupe:
             return
-        if (vehicle.kind == "car" and vehicle.yielding_to
-                and car_parked(vehicle) and not self._clears_access_queue(vehicle)):
-            vehicle.waiting = True
+        if (vehicule.type_vehicule == "car" and vehicule.cede_aux
+                and voiture_rangee(vehicule) and not self._degage_file_acces(vehicule)):
+            vehicule.en_attente = True
             return
-        if vehicle.dwell_remaining > 0:
-            vehicle.dwell_remaining = max(0.0, vehicle.dwell_remaining - STEP)
-            vehicle.waiting = True
+        if vehicule.temps_intervention_restant > 0:
+            vehicule.temps_intervention_restant = max(0.0, vehicule.temps_intervention_restant - PAS_TEMPS)
+            vehicule.en_attente = True
             return
-        old = vehicle.distance
-        speed = vehicle.speed
-        if vehicle.kind == "car" and any(start <= old < end
-                                         for start, end in vehicle.route.turn_zones):
-            speed *= TURN_SPEED_FACTOR
-        if vehicle.kind == "car":
-            x, y, angle = vehicle.position
+        ancien = vehicule.distance
+        vitesse = vehicule.vitesse
+        if vehicule.type_vehicule == "car" and any(debut <= ancien < fin
+                                         for debut, fin in vehicule.trajet.zones_virage):
+            vitesse *= FACTEUR_VITESSE_VIRAGE
+        if vehicule.type_vehicule == "car":
+            x, y, angle = vehicule.position
             dx, dy = cos(radians(angle)), sin(radians(angle))
-            for other in self.cars:
-                if other is vehicle:
+            for autre in self.voitures:
+                if autre is vehicule:
                     continue
-                ox, oy, _ = other.position
-                ahead = (ox - x) * dx + (oy - y) * dy
-                lateral = abs((ox - x) * dy - (oy - y) * dx)
-                if (other.lateral_offset > 0 and not other.yielding_to
-                        and -20 < ahead < GAP + 12 and lateral < 40):
-                    speed = min(speed, 18.0)
-                if other.identifier not in self.crossing_owners:
+                ox, oy, _ = autre.position
+                avance_relative = (ox - x) * dx + (oy - y) * dy
+                ecart_lateral = abs((ox - x) * dy - (oy - y) * dx)
+                if (autre.decalage_lateral > 0 and not autre.cede_aux
+                        and -20 < avance_relative < DISTANCE_SECURITE + 12 and ecart_lateral < 40):
+                    vitesse = min(vitesse, 18.0)
+                if autre.identifiant not in self.vehicules_engages:
                     continue
-                if other.turn == "straight" or other.turn == vehicle.turn:
+                if autre.virage == "straight" or autre.virage == vehicule.virage:
                     continue
-                if 0 < ahead < 150 and lateral < 70:
-                    speed = min(speed, 18.0)
-        target = min(old + speed * STEP, vehicle.route.length)
-        target = self._follow_queue(vehicle, target)
-        if (vehicle.kind == "car" and vehicle.yielding_to
-                and vehicle.manoeuvre_start is not None):
-            target = min(target, vehicle.manoeuvre_start + vehicle.manoeuvre_length)
-        target = self._limit_at_junctions(vehicle, old, target)
-        crossing = vehicle.crossing
-        entering = crossing is not None and old <= crossing[0] and target > crossing[0]
-        if entering and not self._can_enter(vehicle):
-            target = crossing[0]
-        if vehicle.hospital is not None and not vehicle.visited:
-            target = min(target, vehicle.hospital)
-        if target > old and not self._clear_path(vehicle, target):
-            low, high = old, target
-            if not self._clear_path(vehicle, old + min(.05, target - old)):
-                high = old
-            for _ in range(8 if high > old else 0):
-                middle = (low + high) / 2
-                if self._clear_path(vehicle, middle):
-                    low = middle
+                if 0 < avance_relative < 150 and ecart_lateral < 70:
+                    vitesse = min(vitesse, 18.0)
+        cible = min(ancien + vitesse * PAS_TEMPS, vehicule.trajet.longueur)
+        cible = self._suivre_file(vehicule, cible)
+        if (vehicule.type_vehicule == "car" and vehicule.cede_aux
+                and vehicule.debut_manoeuvre is not None):
+            cible = min(cible, vehicule.debut_manoeuvre + vehicule.longueur_manoeuvre)
+        cible = self._limiter_aux_raccordements(vehicule, ancien, cible)
+        passage = vehicule.passage
+        entre = passage is not None and ancien <= passage[0] and cible > passage[0]
+        if entre and not self._peut_entrer(vehicule):
+            cible = passage[0]
+        if vehicule.arret_intervention is not None and not vehicule.intervention_effectuee:
+            cible = min(cible, vehicule.arret_intervention)
+        if cible > ancien and not self._trajet_libre(vehicule, cible):
+            borne_basse, borne_haute = ancien, cible
+            if not self._trajet_libre(vehicule, ancien + min(.05, cible - ancien)):
+                borne_haute = ancien
+            for _ in range(8 if borne_haute > ancien else 0):
+                milieu = (borne_basse + borne_haute) / 2
+                if self._trajet_libre(vehicule, milieu):
+                    borne_basse = milieu
                 else:
-                    high = middle
-            target = low
-        if target > old + 1e-7 and self._clear_path(vehicle, target):
-            vehicle.distance = target
-            if vehicle.manoeuvre_start is not None:
-                vehicle.lateral_offset, _ = vehicle.roadside_offset(target)
-                if target >= vehicle.manoeuvre_start + vehicle.manoeuvre_length - 1e-7:
-                    vehicle.lateral_offset = vehicle.manoeuvre_target
-                    vehicle.manoeuvre_start = None
-            vehicle.current_speed = (target - old) / STEP
-            if entering and target > crossing[0]:
-                self.crossing_owners.add(vehicle.identifier)
-        if (vehicle.manoeuvre_start is not None and vehicle.distance >=
-                vehicle.manoeuvre_start + vehicle.manoeuvre_length - 1e-6):
-            vehicle.distance = vehicle.manoeuvre_start + vehicle.manoeuvre_length
-            vehicle.lateral_offset = vehicle.manoeuvre_target
-            vehicle.manoeuvre_start = None
-        vehicle.waiting = vehicle.distance <= old + 1e-9
-        if (vehicle.kind == "car" and vehicle.yielding_to and car_parked(vehicle)
-                and not self._clears_access_queue(vehicle)):
-            vehicle.waiting = True
-            vehicle.current_speed = 0.0
-        if crossing and vehicle.distance >= crossing[1]:
-            self.crossing_owners.discard(vehicle.identifier)
-            vehicle.crossing_index += 1
-            vehicle.requested_at = None
-        if vehicle.hospital is not None and not vehicle.visited and vehicle.distance >= vehicle.hospital - 1e-6:
-            vehicle.distance = vehicle.hospital
-            vehicle.visited = True
-            vehicle.dwell_remaining = DWELL
-        if vehicle.kind != "car" and vehicle.distance >= vehicle.route.length - 1e-6:
-            vehicle.busy = False
-            vehicle.distance = 0.0
-            vehicle.lateral_offset = 0.0
-            vehicle.manoeuvre_start = None
-            vehicle.waiting = False
-            self.completed += 1
-            self.events.append((vehicle.identifier, "disponible"))
+                    borne_haute = milieu
+            cible = borne_basse
+        if cible > ancien + 1e-7 and self._trajet_libre(vehicule, cible):
+            vehicule.distance = cible
+            if vehicule.debut_manoeuvre is not None:
+                vehicule.decalage_lateral, _ = vehicule.decalage_lateral_a(cible)
+                if cible >= vehicule.debut_manoeuvre + vehicule.longueur_manoeuvre - 1e-7:
+                    vehicule.decalage_lateral = vehicule.decalage_cible
+                    vehicule.debut_manoeuvre = None
+            vehicule.vitesse_actuelle = (cible - ancien) / PAS_TEMPS
+            if entre and cible > passage[0]:
+                self.vehicules_engages.add(vehicule.identifiant)
+        if (vehicule.debut_manoeuvre is not None and vehicule.distance >=
+                vehicule.debut_manoeuvre + vehicule.longueur_manoeuvre - 1e-6):
+            vehicule.distance = vehicule.debut_manoeuvre + vehicule.longueur_manoeuvre
+            vehicule.decalage_lateral = vehicule.decalage_cible
+            vehicule.debut_manoeuvre = None
+        vehicule.en_attente = vehicule.distance <= ancien + 1e-9
+        if (vehicule.type_vehicule == "car" and vehicule.cede_aux and voiture_rangee(vehicule)
+                and not self._degage_file_acces(vehicule)):
+            vehicule.en_attente = True
+            vehicule.vitesse_actuelle = 0.0
+        if passage and vehicule.distance >= passage[1]:
+            self.vehicules_engages.discard(vehicule.identifiant)
+            vehicule.indice_passage += 1
+            vehicule.date_demande = None
+        if vehicule.arret_intervention is not None and not vehicule.intervention_effectuee and vehicule.distance >= vehicule.arret_intervention - 1e-6:
+            vehicule.distance = vehicule.arret_intervention
+            vehicule.intervention_effectuee = True
+            vehicule.temps_intervention_restant = DUREE_INTERVENTION
+        if vehicule.type_vehicule != "car" and vehicule.distance >= vehicule.trajet.longueur - 1e-6:
+            vehicule.occupe = False
+            vehicule.distance = 0.0
+            vehicule.decalage_lateral = 0.0
+            vehicule.debut_manoeuvre = None
+            vehicule.en_attente = False
+            self.trajets_termines += 1
+            self.evenements.append((vehicule.identifiant, "disponible"))
 
-    def _limit_at_junctions(self, vehicle, old, target):
+    def _limiter_aux_raccordements(self, vehicule, ancien, cible):
         """Aux raccordements sans feux, reserver un passage puis le liberer."""
-        for stop, end, key in vehicle.route.junctions:
-            if old <= stop < target:
-                if not self._junction_clear(vehicle, stop, end, key):
-                    target = stop
-        return target
+        for arret, fin, cle in vehicule.trajet.raccordements:
+            if ancien <= arret < cible:
+                if not self._raccordement_libre(vehicule, arret, fin, cle):
+                    cible = arret
+        return cible
 
-    def _junction_clear(self, vehicle, stop, end, key):
-        priority = self._junction_priority(key)
-        if priority and priority[0] is not vehicle:
-            rescue, rescue_stop = priority
+    def _raccordement_libre(self, vehicule, arret, fin, cle):
+        priorite = self._priorite_raccordement(cle)
+        if priorite and priorite[0] is not vehicule:
+            secours, arret_secours = priorite
             # Une voiture sur la voie devant le secours doit d'abord degager,
             # sinon le secours resterait bloque derriere sa propre priorite.
-            if not self._blocks_approach(vehicle, rescue, rescue_stop):
+            if not self._bloque_approche(vehicule, secours, arret_secours):
                 return False
-        following = set()
-        for other in self.vehicles:
-            if other is vehicle or (other.kind != "car" and not other.busy):
+        suivants = set()
+        for autre in self.vehicules:
+            if autre is vehicule or (autre.type_vehicule != "car" and not autre.occupe):
                 continue
-            for other_stop, other_end, other_key in other.route.junctions:
-                if key != other_key:
+            for arret_autre, fin_autre, cle_autre in autre.trajet.raccordements:
+                if cle != cle_autre:
                     continue
-                if self.can_share_junction(vehicle, stop, key, other, other_stop):
+                if self.raccordements_compatibles(vehicule, arret, cle, autre, arret_autre):
                     # La file peut avancer dans la zone jusqu'au vrai feu,
-                    # meme si son leader y attend. GAP reste controle a chaque pas.
-                    if other.distance >= other_stop:
-                        following.add(other.identifier)
-                elif self._following_exit(vehicle, end, other, other_end):
-                    following.add(other.identifier)
-                elif other_stop < other.distance < other_end:
-                    if key == "parking" and self._opposite_station_moves(vehicle, other):
+        # meme si sa tete de file y attend. DISTANCE_SECURITE reste controlee a chaque pas.
+                    if autre.distance >= arret_autre:
+                        suivants.add(autre.identifiant)
+                elif self._suit_sortie(vehicule, fin, autre, fin_autre):
+                    suivants.add(autre.identifiant)
+                elif arret_autre < autre.distance < fin_autre:
+                    if cle == "parking" and self._mouvements_opposes_caserne(vehicule, autre):
                         # Le secours sortant peut attendre a F sans retenir toute
                         # l'allee du retour. Le balayage controle les gabarits.
                         continue
-                    if self._junction_still_conflicts(
-                            vehicle, stop, end, key, other, other_stop, other_end):
+                    if self._conflit_raccordement_restant(
+                            vehicule, arret, fin, cle, autre, arret_autre, fin_autre):
                         return False
         # Le garage ne reserve que son allee : l'insertion est controlee a F.
         # Sinon une file deja en train de degager F immobilise encore le secours
         # sur sa place, alors que son trajet jusqu'a la ligne d'insertion est libre.
-        sweep_end, margin = end, (1 if vehicle.kind != "car" else 46)
-        if key == "parking" and stop == 0:
-            sweep_end = next(start for start, _, name in vehicle.route.junctions if name == "F")
-            margin = 1
+        fin_balaye, marge = fin, (1 if vehicule.type_vehicule != "car" else 46)
+        if cle == "parking" and arret == 0:
+            fin_balaye = next(debut for debut, _, nom in vehicule.trajet.raccordements if nom == "F")
+            marge = 1
         # Controler aussi la sortie avant d'engager le vehicule.
-        for offset in range(0, int(sweep_end - stop) + margin, 6):
-            if not self._clear_path(vehicle, stop + offset, following):
+        for decalage in range(0, int(fin_balaye - arret) + marge, 6):
+            if not self._trajet_libre(vehicule, arret + decalage, suivants):
                 return False
         return True
 
-    def _junction_still_conflicts(self, vehicle, stop, end, key, other, other_stop, other_end):
+    def _conflit_raccordement_restant(self, vehicule, arret, fin, cle, autre, arret_autre, fin_autre):
         """Liberer un passage des que l'autre a depasse le dernier point de conflit."""
-        first_move = vehicle.route.junction_movements.get((stop, key))
-        other_move = other.route.junction_movements.get((other_stop, key))
-        if first_move is None or other_move is None:
+        mouvement_premier = vehicule.trajet.mouvements_raccordements.get((arret, cle))
+        mouvement_autre = autre.trajet.mouvements_raccordements.get((arret_autre, cle))
+        if mouvement_premier is None or mouvement_autre is None:
             return True  # Les aires et le stationnement restent exclusifs.
         # Inclure la fin du balayage : au retour F, les deux places divergent
         # juste apres le raccordement, meme si leur mouvement est identique.
-        def manoeuvre_state(item, start):
-            return ((item.manoeuvre_start - start, item.manoeuvre_from,
-                     item.manoeuvre_target, item.manoeuvre_length)
-                    if item.manoeuvre_start is not None else (None, item.lateral_offset))
+        def etat_manoeuvre(element, debut):
+            return ((element.debut_manoeuvre - debut, element.decalage_initial,
+                     element.decalage_cible, element.longueur_manoeuvre)
+                    if element.debut_manoeuvre is not None else (None, element.decalage_lateral))
 
-        adjusted = (vehicle.manoeuvre_start is not None or other.manoeuvre_start is not None
-                    or vehicle.lateral_offset != 0 or other.lateral_offset != 0)
-        cache_key = (key, first_move, other_move, vehicle.kind, other.kind,
-                     vehicle.route.sample(end + 46)[:2],
-                     manoeuvre_state(vehicle, stop), manoeuvre_state(other, other_stop))
-        if cache_key not in self.junction_conflicts:
+        ajuste = (vehicule.debut_manoeuvre is not None or autre.debut_manoeuvre is not None
+                    or vehicule.decalage_lateral != 0 or autre.decalage_lateral != 0)
+        cle_cache = (cle, mouvement_premier, mouvement_autre, vehicule.type_vehicule, autre.type_vehicule,
+                     vehicule.trajet.position_a(fin + 46)[:2],
+                     etat_manoeuvre(vehicule, arret), etat_manoeuvre(autre, arret_autre))
+        if cle_cache not in self.conflits_raccordements:
             # Les memes mouvements au meme raccordement ont la meme geometrie.
             # Calculer une seule fois ou l'autre vehicule finit de nous couper
             # la route ; ajouter une marge pour l'echantillonnage de 3 unites.
-            path = [vehicle.position_at(stop + offset)
-                    for offset in range(0, int(end - stop) + 47, 3)]
-            last_conflict = -inf
-            offsets = list(range(0, int(other_end - other_stop) + 1, 3))
-            offsets.append(other_end - other_stop)
-            for offset in offsets:
-                position = other.position_at(other_stop + offset)
-                if any(hypot(position[0] - point[0], position[1] - point[1]) < GAP + 3
-                       and (not adjusted or not bodies_clear(vehicle, point, other, position))
-                       for point in path):
-                    last_conflict = offset + 3
-            self.junction_conflicts[cache_key] = last_conflict
-        return other.distance - other_stop <= self.junction_conflicts[cache_key]
+            chemin = [vehicule.position_a(arret + decalage)
+                    for decalage in range(0, int(fin - arret) + 47, 3)]
+            dernier_conflit = -inf
+            decalages = list(range(0, int(fin_autre - arret_autre) + 1, 3))
+            decalages.append(fin_autre - arret_autre)
+            for decalage in decalages:
+                position = autre.position_a(arret_autre + decalage)
+                if any(hypot(position[0] - point[0], position[1] - point[1]) < DISTANCE_SECURITE + 3
+                       and (not ajuste or not carrosseries_separees(vehicule, point, autre, position))
+                       for point in chemin):
+                    dernier_conflit = decalage + 3
+            self.conflits_raccordements[cle_cache] = dernier_conflit
+        return autre.distance - arret_autre <= self.conflits_raccordements[cle_cache]
 
-    def can_share_junction(self, first, stop, key, second, other_stop):
+    def raccordements_compatibles(self, premier, arret, cle, second, arret_autre):
         """Partager une meme voie locale ou deux voies tout droit opposees."""
-        if first.kind != "car" or second.kind != "car":
+        if premier.type_vehicule != "car" or second.type_vehicule != "car":
             return False
-        first_move = first.route.junction_movements.get((stop, key))
-        second_move = second.route.junction_movements.get((other_stop, key))
-        if first_move is None or second_move is None:
+        mouvement_premier = premier.trajet.mouvements_raccordements.get((arret, cle))
+        mouvement_second = second.trajet.mouvements_raccordements.get((arret_autre, cle))
+        if mouvement_premier is None or mouvement_second is None:
             return False
-        incoming, outgoing = first_move
-        other_incoming, other_outgoing = second_move
-        return (first_move == second_move
-                or (incoming == outgoing and other_incoming == other_outgoing
-                    and incoming == (-other_incoming[0], -other_incoming[1])))
+        entree_direction, sortie_direction = mouvement_premier
+        entree_autre, sortie_autre = mouvement_second
+        return (mouvement_premier == mouvement_second
+                or (entree_direction == sortie_direction and entree_autre == sortie_autre
+                    and entree_direction == (-entree_autre[0], -entree_autre[1])))
 
-    def _junction_priority(self, key):
+    def _priorite_raccordement(self, cle):
         """Priorite tant que le secours est occupe, aller ET retour compris."""
-        candidates = []
-        for rescue in self.rescues:
-            if not rescue.busy:
+        candidats = []
+        for secours in self.secours:
+            if not secours.occupe:
                 continue
-            for stop, end, other_key in rescue.route.junctions:
-                station_departure = key == "F" and self._leaving_station(rescue)
-                if (other_key == key and rescue.distance < end
-                        and (stop - rescue.distance <= JUNCTION_LOOKAHEAD or station_departure)):
-                    candidates.append((rescue, stop))
+            for arret, fin, cle_autre in secours.trajet.raccordements:
+                depart_caserne = cle == "F" and self._quitte_caserne(secours)
+                if (cle_autre == cle and secours.distance < fin
+                        and (arret - secours.distance <= ANTICIPATION_RACCORDEMENT or depart_caserne)):
+                    candidats.append((secours, arret))
                     break
-        if not candidates:
+        if not candidats:
             return None
-        if key == "F":
-            for outgoing, outgoing_stop in candidates:
-                if not self._leaving_station(outgoing):
+        if cle == "F":
+            for sortie_direction, arret_sortie in candidats:
+                if not self._quitte_caserne(sortie_direction):
                     continue
-                for returning, returning_stop in candidates:
-                    if (returning is outgoing or not self._returning_station(returning)
-                            or returning.distance > returning_stop):
+                for en_retour, arret_retour in candidats:
+                    if (en_retour is sortie_direction or not self._revient_caserne(en_retour)
+                            or en_retour.distance > arret_retour):
                         continue
                     # Un depart deja dans l'allee peut barrer la fin du retour.
                     # Le laisser sortir evite que chacun attende l'autre a F.
-                    parking_end = returning.route.length
-                    if any(not bodies_clear(returning, returning.position_at(distance),
-                                            outgoing, outgoing.position)
-                           for distance in range(int(returning_stop), int(parking_end) + 1, 6)):
-                        return outgoing, outgoing_stop
-        return min(candidates, key=lambda item: (item[0].started_at, item[0].identifier))
+                    fin_parking = en_retour.trajet.longueur
+                    if any(not carrosseries_separees(en_retour, en_retour.position_a(distance),
+                                            sortie_direction, sortie_direction.position)
+                           for distance in range(int(arret_retour), int(fin_parking) + 1, 6)):
+                        return sortie_direction, arret_sortie
+        return min(candidats, key=lambda element: (element[0].debut_mission, element[0].identifiant))
 
-    def _blocks_approach(self, vehicle, rescue, stop):
+    def _bloque_approche(self, vehicule, secours, arret):
         """Autoriser les vehicules devant le secours a liberer sa voie d'arrivee."""
-        x, y, _ = vehicle.position
-        distance = rescue.distance
-        while distance <= stop + 1e-9:
-            rx, ry, _ = rescue.route.sample(distance)
-            if hypot(x - rx, y - ry) < GAP:
+        x, y, _ = vehicule.position
+        distance = secours.distance
+        while distance <= arret + 1e-9:
+            rx, ry, _ = secours.trajet.position_a(distance)
+            if hypot(x - rx, y - ry) < DISTANCE_SECURITE:
                 return True
             distance += 6
-        rx, ry, _ = rescue.route.sample(stop)
-        return hypot(x - rx, y - ry) < GAP
+        rx, ry, _ = secours.trajet.position_a(arret)
+        return hypot(x - rx, y - ry) < DISTANCE_SECURITE
 
-    def frame(self):
-        states = []
-        for vehicle in self.vehicles:
-            x, y, heading = vehicle.position
-            stage = "A l'arret" if vehicle.waiting else "En circulation"
-            if vehicle.kind == "car" and vehicle.yielding_to:
-                stage = "Range sur le cote - priorite secours " + ", ".join(vehicle.yielding_to)
-            elif vehicle.kind == "car" and vehicle.lateral_offset > 1e-6:
-                stage = "Reprise apres le passage du secours"
-            if vehicle.kind != "car":
-                if not vehicle.busy:
-                    stage = "A la caserne"
-                elif vehicle.dwell_remaining > 0:
-                    stage = "Intervention - " + DESTINATIONS[vehicle.destination]
-                elif vehicle.visited:
-                    stage = "Retour a la caserne"
+    def etat_simulation(self):
+        etats = []
+        for vehicule in self.vehicules:
+            x, y, orientation = vehicule.position
+            etape = "A l'arret" if vehicule.en_attente else "En circulation"
+            if vehicule.type_vehicule == "car" and vehicule.cede_aux:
+                etape = "Range sur le cote - priorite secours " + ", ".join(vehicule.cede_aux)
+            elif vehicule.type_vehicule == "car" and vehicule.decalage_lateral > 1e-6:
+                etape = "Reprise apres le passage du secours"
+            if vehicule.type_vehicule != "car":
+                if not vehicule.occupe:
+                    etape = "A la caserne"
+                elif vehicule.temps_intervention_restant > 0:
+                    etape = "Intervention - " + DESTINATIONS[vehicule.destination]
+                elif vehicule.intervention_effectuee:
+                    etape = "Retour a la caserne"
                 else:
-                    stage = "Vers le point " + DESTINATIONS[vehicle.destination]
-            states.append(VehicleState(vehicle.identifier, vehicle.kind, vehicle.color,
-                                       vehicle.route, x, y, heading, vehicle.waiting,
-                                       vehicle.busy, vehicle.distance / vehicle.route.length, stage))
-        return Frame(tuple(states), self.lights.signal("NS"), self.lights.signal("EW"),
-                     self.lights.description, self.lights.remaining, self.completed)
+                    etape = "Vers le point " + DESTINATIONS[vehicule.destination]
+            etats.append(EtatVehicule(vehicule.identifiant, vehicule.type_vehicule, vehicule.couleur,
+                                       vehicule.trajet, x, y, orientation, vehicule.en_attente,
+                                       vehicule.occupe, vehicule.distance / vehicule.trajet.longueur, etape))
+        return EtatSimulation(tuple(etats), self.feux.signal("NS"), self.feux.signal("EW"),
+                     self.feux.description, self.feux.temps_restant, self.trajets_termines)

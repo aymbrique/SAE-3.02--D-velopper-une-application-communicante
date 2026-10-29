@@ -1,178 +1,178 @@
 """Plan commun au dessin et aux trajets : coordonnees du croquis utilisateur."""
 
 from math import hypot
-from src.modeles.trajet import Route, bezier
+from src.modeles.trajet import Trajet, bezier
 
-SCENE_WIDTH, SCENE_HEIGHT = 1600, 1100
+LARGEUR_SCENE, HAUTEUR_SCENE = 1600, 1100
 CX, CY = 450, 560
-LANE, ROAD_HALF = 34, 70
-METRES_PER_UNIT = 0.5
-STOP_DISTANCE = 96
-TURN_DISTANCE = 80
-CLEARANCE = 26
-CAR_EDGE_MARGIN = 30  # Faire apparaitre/disparaitre le rectangle hors de la vue.
+DECALAGE_VOIE, DEMI_LARGEUR_ROUTE = 34, 70
+METRES_PAR_UNITE = 0.5
+DISTANCE_ARRET = 96
+DISTANCE_VIRAGE = 80
+MARGE_DEGAGEMENT = 26
+MARGE_BORD_VOITURE = 30  # Faire apparaitre/disparaitre le rectangle hors de la vue.
 PARKING_X = 270
 PARKING_Y = {"01": 150, "02": 210}
 DESTINATIONS = {"W": "Mairie", "S": "Restaurant",
                 "N": "IUT de Colmar", "E": "Leclerc"}
-OPPOSITE = {"N": "S", "S": "N", "E": "W", "W": "E"}
+DIRECTIONS_OPPOSEES = {"N": "S", "S": "N", "E": "W", "W": "E"}
 
 # Les noeuds sont les raccordements des routes. C est le seul carrefour a feux.
-NODES = {
+NOEUDS = {
     "C": (CX, CY), "F": (CX, 200), "north": (CX, 0), "depot": (PARKING_X, 200),
     "W": (150, CY), "west": (0, CY), "B": (850, CY), "R": (1150, CY),
-    "E": (1400, CY), "east": (SCENE_WIDTH, CY),
+    "E": (1400, CY), "east": (LARGEUR_SCENE, CY),
     "D": (CX, 950), "L": (150, 950), "Q": (1150, 950),
-    "low_west": (0, 950), "low_east": (SCENE_WIDTH, 950),
-    "U": (850, 240), "top": (850, 0), "H": (1400, 240), "upper_east": (SCENE_WIDTH, 240),
+    "low_west": (0, 950), "low_east": (LARGEUR_SCENE, 950),
+    "U": (850, 240), "top": (850, 0), "H": (1400, 240), "upper_east": (LARGEUR_SCENE, 240),
     "site_W": (150, 420), "site_S": (150, 810),
     "site_N": (1400, 110), "site_E": (1400, 420),
 }
-ROAD_SEGMENTS = [
+TRONCONS_ROUTES = [
     ("north", "F"), ("F", "C"), ("C", "D"),
     ("west", "W"), ("W", "C"), ("C", "B"), ("B", "R"), ("R", "E"), ("E", "east"),
     ("top", "U"), ("U", "B"), ("U", "H"), ("H", "upper_east"),
     ("R", "Q"), ("low_west", "L"), ("L", "D"), ("D", "Q"), ("Q", "low_east"),
 ]
-SITE_ENTRANCES = {"W": "W", "S": "L", "N": "H", "E": "E"}
-INTERVENTION_POINTS = {}
-for side in DESTINATIONS:
-    x, y = NODES["site_" + side]
-    INTERVENTION_POINTS[side] = (x, y - 50)
+ENTREES_SITES = {"W": "W", "S": "L", "N": "H", "E": "E"}
+POINTS_INTERVENTION = {}
+for cote in DESTINATIONS:
+    x, y = NOEUDS["site_" + cote]
+    POINTS_INTERVENTION[cote] = (x, y - 50)
 
 
-def direction(start, end):
-    dx, dy = end[0] - start[0], end[1] - start[1]
-    length = hypot(dx, dy)
-    return dx / length, dy / length
+def direction(debut, fin):
+    dx, dy = fin[0] - debut[0], fin[1] - debut[1]
+    longueur = hypot(dx, dy)
+    return dx / longueur, dy / longueur
 
 
-def lane_point(center, heading, forward):
+def point_sur_voie(centre, orientation, avance):
     """Decaler un point sur la voie de droite et avancer de forward unites."""
-    dx, dy = heading
-    return (center[0] + forward * dx - LANE * dy,
-            center[1] + forward * dy + LANE * dx)
+    dx, dy = orientation
+    return (centre[0] + avance * dx - DECALAGE_VOIE * dy,
+            centre[1] + avance * dy + DECALAGE_VOIE * dx)
 
 
-def build_route(name, nodes, parking_y=None, traffic_bounds=None):
+def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
     """Relier les routes, arrondir les virages et noter les zones a reserver."""
-    nodes = tuple(nodes)
-    for first, second in zip(nodes, nodes[1:]):
-        if (first, second) == ("Q", "R"):
+    noeuds = tuple(noeuds)
+    for premier, second in zip(noeuds, noeuds[1:]):
+        if (premier, second) == ("Q", "R"):
             raise ValueError("Sens interdit : le raccordement R-Q se parcourt uniquement de R vers Q.")
-    for movement in zip(nodes, nodes[1:], nodes[2:]):
-        if movement == ("E", "R", "Q"):
+    for mouvement in zip(noeuds, noeuds[1:], noeuds[2:]):
+        if mouvement == ("E", "R", "Q"):
             raise ValueError("Virage interdit : un vehicule venant de E ne peut pas tourner de R vers Q.")
-    first = direction(NODES[nodes[0]], NODES[nodes[1]])
-    points = [lane_point(NODES[nodes[0]], first, 0)]
-    if traffic_bounds is not None:
-        points.insert(0, outside_road(points[0], first, traffic_bounds, entering=True))
+    premier = direction(NOEUDS[noeuds[0]], NOEUDS[noeuds[1]])
+    points = [point_sur_voie(NOEUDS[noeuds[0]], premier, 0)]
+    if limites_circulation is not None:
+        points.insert(0, point_hors_carte(points[0], premier, limites_circulation, entre=True))
     if parking_y is not None:
         # Contourner les deux places pour ne pas passer sur le vehicule gare.
         points = [(PARKING_X, parking_y), (340, parking_y), (340, 234)]
-    crossing_indexes = []
-    junction_indexes = []
-    junction_directions = []
-    turn_indexes = []
-    hospital_index = None
-    depot_exit_index = None
-    depot_return_index = None
+    indices_passages = []
+    indices_raccordements = []
+    directions_raccordements = []
+    indices_virages = []
+    indice_intervention = None
+    indice_sortie_caserne = None
+    indice_retour_caserne = None
 
-    for index in range(1, len(nodes) - 1):
-        key = nodes[index]
-        center = NODES[key]
-        incoming = direction(NODES[nodes[index - 1]], center)
-        outgoing = direction(center, NODES[nodes[index + 1]])
-        if key.startswith("site_"):
+    for index in range(1, len(noeuds) - 1):
+        cle = noeuds[index]
+        centre = NOEUDS[cle]
+        entree_direction = direction(NOEUDS[noeuds[index - 1]], centre)
+        sortie_direction = direction(centre, NOEUDS[noeuds[index + 1]])
+        if cle.startswith("site_"):
             # Demi-tour dans l'aire, avec arret sur le rectangle d'intervention.
-            x, y = center
-            start = len(points)
-            points.extend([(x + LANE, y), (x + LANE, y - 50), (x, y - 50),
-                           (x - LANE, y - 50), (x - LANE, y)])
-            hospital_index = start + 2
-            junction_indexes.append((start, len(points) - 1, 0, key))
+            x, y = centre
+            debut = len(points)
+            points.extend([(x + DECALAGE_VOIE, y), (x + DECALAGE_VOIE, y - 50), (x, y - 50),
+                           (x - DECALAGE_VOIE, y - 50), (x - DECALAGE_VOIE, y)])
+            indice_intervention = debut + 2
+            indices_raccordements.append((debut, len(points) - 1, 0, cle))
             continue
 
-        start = len(points)
-        points.append(lane_point(center, incoming, -STOP_DISTANCE))
-        points.append(lane_point(center, incoming, -TURN_DISTANCE))
-        end = lane_point(center, outgoing, TURN_DISTANCE)
-        if incoming == outgoing:
-            points.append(end)
+        debut = len(points)
+        points.append(point_sur_voie(centre, entree_direction, -DISTANCE_ARRET))
+        points.append(point_sur_voie(centre, entree_direction, -DISTANCE_VIRAGE))
+        fin = point_sur_voie(centre, sortie_direction, DISTANCE_VIRAGE)
+        if entree_direction == sortie_direction:
+            points.append(fin)
         else:
-            turn_start = len(points) - 1
-            control1 = (points[-1][0] + incoming[0] * 64,
-                        points[-1][1] + incoming[1] * 64)
-            control2 = (end[0] - outgoing[0] * 64, end[1] - outgoing[1] * 64)
-            points.extend(bezier(points[-1], control1, control2, end))
-            turn_indexes.append((turn_start, len(points) - 1))
-        if key == "C":
-            axis = "NS" if incoming[0] == 0 else "EW"
-            crossing_indexes.append((start, len(points) - 1, axis))
+            debut_virage = len(points) - 1
+            controle1 = (points[-1][0] + entree_direction[0] * 64,
+                        points[-1][1] + entree_direction[1] * 64)
+            controle2 = (fin[0] - sortie_direction[0] * 64, fin[1] - sortie_direction[1] * 64)
+            points.extend(bezier(points[-1], controle1, controle2, fin))
+            indices_virages.append((debut_virage, len(points) - 1))
+        if cle == "C":
+            axe = "NS" if entree_direction[0] == 0 else "EW"
+            indices_passages.append((debut, len(points) - 1, axe))
         else:
-            junction_indexes.append((start, len(points) - 1, CLEARANCE, key))
-            junction_directions.append((start, key, incoming, outgoing))
-        if parking_y is not None and key == "F":
-            if depot_exit_index is None:
-                depot_exit_index = len(points) - 1
+            indices_raccordements.append((debut, len(points) - 1, MARGE_DEGAGEMENT, cle))
+            directions_raccordements.append((debut, cle, entree_direction, sortie_direction))
+        if parking_y is not None and cle == "F":
+            if indice_sortie_caserne is None:
+                indice_sortie_caserne = len(points) - 1
             else:
-                depot_return_index = start
+                indice_retour_caserne = debut
 
-    last = direction(NODES[nodes[-2]], NODES[nodes[-1]])
+    dernier = direction(NOEUDS[noeuds[-2]], NOEUDS[noeuds[-1]])
     if parking_y is None:
-        points.append(lane_point(NODES[nodes[-1]], last, 0))
-        if traffic_bounds is not None:
-            points.append(outside_road(points[-1], last, traffic_bounds))
+        points.append(point_sur_voie(NOEUDS[noeuds[-1]], dernier, 0))
+        if limites_circulation is not None:
+            points.append(point_hors_carte(points[-1], dernier, limites_circulation))
     else:
         points.extend([(340, 166), (340, parking_y), (PARKING_X, parking_y)])
-        junction_indexes.append((0, depot_exit_index, CLEARANCE, "parking"))
-        junction_indexes.append((depot_return_index, len(points) - 1, 0, "parking"))
+        indices_raccordements.append((0, indice_sortie_caserne, MARGE_DEGAGEMENT, "parking"))
+        indices_raccordements.append((indice_retour_caserne, len(points) - 1, 0, "parking"))
 
-    route = Route(name, points)
-    route.nodes = tuple(nodes)
-    route.turn_zones = [(route.distances[start], route.distances[end])
-                        for start, end in turn_indexes]
-    route.crossings = []
-    for start, end, axis in crossing_indexes:
-        route.crossings.append((route.distances[start], route.distances[end] + CLEARANCE, axis))
-    route.junctions = []
-    for start, end, margin, key in junction_indexes:
-        route.junctions.append((route.distances[start], route.distances[end] + margin, key))
-    route.junction_movements = {}
-    for start, key, incoming, outgoing in junction_directions:
-        route.junction_movements[(route.distances[start], key)] = (incoming, outgoing)
-    route.hospital = None
-    if hospital_index is not None:
-        route.hospital = route.distances[hospital_index]
-    return route
+    trajet = Trajet(nom, points)
+    trajet.noeuds = tuple(noeuds)
+    trajet.zones_virage = [(trajet.distances[debut], trajet.distances[fin])
+                        for debut, fin in indices_virages]
+    trajet.passages = []
+    for debut, fin, axe in indices_passages:
+        trajet.passages.append((trajet.distances[debut], trajet.distances[fin] + MARGE_DEGAGEMENT, axe))
+    trajet.raccordements = []
+    for debut, fin, marge, cle in indices_raccordements:
+        trajet.raccordements.append((trajet.distances[debut], trajet.distances[fin] + marge, cle))
+    trajet.mouvements_raccordements = {}
+    for debut, cle, entree_direction, sortie_direction in directions_raccordements:
+        trajet.mouvements_raccordements[(trajet.distances[debut], cle)] = (entree_direction, sortie_direction)
+    trajet.arret_intervention = None
+    if indice_intervention is not None:
+        trajet.arret_intervention = trajet.distances[indice_intervention]
+    return trajet
 
 
-def outside_road(point, heading, bounds, entering=False):
+def point_hors_carte(point, orientation, limites, entre=False):
     """Prolonger la voie jusqu'a l'exterieur du plan ET des marges visibles."""
-    left, top, right, bottom = bounds
+    gauche, haut, droite, bas = limites
     x, y = point
-    dx, dy = heading
-    if entering:
+    dx, dy = orientation
+    if entre:
         dx, dy = -dx, -dy
     if dx < 0:
-        x = min(0, left) - CAR_EDGE_MARGIN
+        x = min(0, gauche) - MARGE_BORD_VOITURE
     elif dx > 0:
-        x = max(SCENE_WIDTH, right) + CAR_EDGE_MARGIN
+        x = max(LARGEUR_SCENE, droite) + MARGE_BORD_VOITURE
     elif dy < 0:
-        y = min(0, top) - CAR_EDGE_MARGIN
+        y = min(0, haut) - MARGE_BORD_VOITURE
     else:
-        y = max(SCENE_HEIGHT, bottom) + CAR_EDGE_MARGIN
+        y = max(HAUTEUR_SCENE, bas) + MARGE_BORD_VOITURE
     return x, y
 
 
-def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT), *, variant=None):
+def trajet_voiture(origine, virage, limites_circulation=(0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), *, variante=None):
     """Choisir le virage a C et, en option, une bifurcation plus loin sur le plan."""
-    approaches = {
+    approches = {
         "N": ["north", "F", "C"], "W": ["west", "W", "C"],
         "E": ["upper_east", "H", "U", "B", "C"],
         "S": ["low_east", "Q", "D", "C"],
     }
-    exits = {
+    sorties = {
         "N": ["C", "F", "north"], "W": ["C", "W", "west"],
         "E": ["C", "B", "R", "E", "east"],
         "S": ["C", "D", "Q", "low_east"],
@@ -183,70 +183,70 @@ def car_route(origin, turn, traffic_bounds=(0, 0, SCENE_WIDTH, SCENE_HEIGHT), *,
         "W": {"straight": "E", "left": "N", "right": "S"},
         "E": {"straight": "W", "left": "S", "right": "N"},
     }
-    names = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
-    movements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
-    destination = destinations[origin][turn]
-    exit_nodes = exits[destination]
-    suffix = ""
-    if variant == "lower_west":
+    noms = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
+    mouvements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
+    destination = destinations[origine][virage]
+    noeuds_sortie = sorties[destination]
+    suffixe = ""
+    if variante == "lower_west":
         if destination != "S":
             raise ValueError("La bifurcation Ouest de D exige une sortie Sud au carrefour C.")
-        exit_nodes = ["C", "D", "L", "low_west"]
-        suffix = " - Ouest par la route du bas"
-    elif variant == "middle_north":
+        noeuds_sortie = ["C", "D", "L", "low_west"]
+        suffixe = " - Ouest par la route du bas"
+    elif variante == "middle_north":
         if destination != "E":
             raise ValueError("La bifurcation Nord de B exige une sortie Est au carrefour C.")
-        exit_nodes = ["C", "B", "U", "top"]
-        suffix = " - Nord par la route du milieu"
-    elif variant is not None:
+        noeuds_sortie = ["C", "B", "U", "top"]
+        suffixe = " - Nord par la route du milieu"
+    elif variante is not None:
         raise ValueError("Bifurcation de voiture inconnue")
-    nodes = approaches[origin] + exit_nodes[1:]
-    route = build_route(f"{names[origin]} - {movements[turn]}{suffix}", nodes, traffic_bounds=traffic_bounds)
-    route.variant = variant
-    return route, route.crossings[0][0]
+    noeuds = approches[origine] + noeuds_sortie[1:]
+    trajet = construire_trajet(f"{noms[origine]} - {mouvements[virage]}{suffixe}", noeuds, limites_circulation=limites_circulation)
+    trajet.variante = variante
+    return trajet, trajet.passages[0][0]
 
 
-def rescue_route(identifier, parking_y, destination="S"):
+def trajet_secours(identifiant, parking_y, destination="S"):
     if destination not in DESTINATIONS:
         raise ValueError("Point d'intervention inconnu")
-    paths = {
+    chemins = {
         "W": ["depot", "F", "C", "W", "site_W"],
         "S": ["depot", "F", "C", "D", "L", "site_S"],
         "N": ["depot", "F", "C", "B", "U", "H", "site_N"],
         "E": ["depot", "F", "C", "B", "R", "E", "site_E"],
     }
-    outward = paths[destination]
-    nodes = outward + list(reversed(outward[:-1]))
-    route = build_route(f"Secours {identifier} - {DESTINATIONS[destination]} - aller/retour", nodes, parking_y)
-    return route, tuple(route.crossings), route.hospital
+    aller = chemins[destination]
+    noeuds = aller + list(reversed(aller[:-1]))
+    trajet = construire_trajet(f"Secours {identifiant} - {DESTINATIONS[destination]} - aller/retour", noeuds, parking_y)
+    return trajet, tuple(trajet.passages), trajet.arret_intervention
 
 
-def car_exit(route):
-    return route.crossings[0][1]
+def sortie_voiture(trajet):
+    return trajet.passages[0][1]
 
 
-def on_road(x, y):
+def sur_chaussee(x, y):
     """Chaussée dessinee, y compris les extremites ouvertes et la voie R-Q."""
-    for first, second in ROAD_SEGMENTS:
-        ax, ay = NODES[first]
-        bx, by = NODES[second]
+    for premier, second in TRONCONS_ROUTES:
+        ax, ay = NOEUDS[premier]
+        bx, by = NOEUDS[second]
         if ax == bx:
-            top, bottom = sorted((ay, by))
-            if top == 0:
-                top = float('-inf')
-            left, right = ax - ROAD_HALF, ax + ROAD_HALF
-            if (first, second) == ("R", "Q"):
-                right = ax
-            if left <= x <= right and top <= y <= bottom:
+            haut, bas = sorted((ay, by))
+            if haut == 0:
+                haut = float('-inf')
+            gauche, droite = ax - DEMI_LARGEUR_ROUTE, ax + DEMI_LARGEUR_ROUTE
+            if (premier, second) == ("R", "Q"):
+                droite = ax
+            if gauche <= x <= droite and haut <= y <= bas:
                 return True
         else:
-            left, right = sorted((ax, bx))
-            if left == 0:
-                left = float('-inf')
-            if right == SCENE_WIDTH:
-                right = float('inf')
-            if left <= x <= right and ay - ROAD_HALF <= y <= ay + ROAD_HALF:
+            gauche, droite = sorted((ax, bx))
+            if gauche == 0:
+                gauche = float('-inf')
+            if droite == LARGEUR_SCENE:
+                droite = float('inf')
+            if gauche <= x <= droite and ay - DEMI_LARGEUR_ROUTE <= y <= ay + DEMI_LARGEUR_ROUTE:
                 return True
-    return any(abs(x - NODES[key][0]) <= ROAD_HALF
-               and abs(y - NODES[key][1]) <= ROAD_HALF
-               for key in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"))
+    return any(abs(x - NOEUDS[cle][0]) <= DEMI_LARGEUR_ROUTE
+               and abs(y - NOEUDS[cle][1]) <= DEMI_LARGEUR_ROUTE
+               for cle in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"))

@@ -86,7 +86,7 @@ vert normal bénéficiaire. Un bonus interrompu reste dû pour sa partie non ser
 possède un numéro et une session. Le client garde les messages jusqu'à leur ACK
 et se reconnecte après une coupure.
 
-`serveur.py` reçoit et valide les messages, puis appelle `MariaDBStore`.
+`serveur.py` reçoit et valide les messages, puis appelle `StockageMariaDB`.
 L'enregistrement du dernier état et de l'historique se fait dans une transaction.
 Les doublons sont confirmés sans ajouter de ligne. Une coupure de liaison ne
 transforme pas un état occupé en disponible.

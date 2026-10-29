@@ -3,176 +3,176 @@
 import unittest
 from math import cos, radians
 
-from src.simulation.moteur import GAP, STEP, RESCUE_SPEED, Simulation
-from src.simulation.priorite import PULL_OVER
-from traffic_checks import assert_spacing
+from src.simulation.moteur import DISTANCE_SECURITE, PAS_TEMPS, VITESSE_SECOURS, Simulation
+from src.simulation.priorite import DECALAGE_RANGEMENT
+from controles_circulation import verifier_espacement
 
 
-class PrioriteFluideTests(unittest.TestCase):
-    def test_followers_keep_order_behind_parked_leader_and_during_merge(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("02", "W")
-        rescue = sim.get_rescue("02")
-        rescue.distance = rescue.crossing[0] - 240
-        leader = sim.spawn("N", "straight")
-        leader.distance = leader.crossing[0] - 100
-        leader.lateral_offset = PULL_OVER
-        leader.yielding_to = ("02",)
-        follower = sim.spawn("N", "straight")
-        follower.distance = leader.distance - GAP
-        initial = follower.distance
-        held = False
+class TestsPrioriteFluide(unittest.TestCase):
+    def test_ordre_file_conserve_pendant_rangement_et_reinsertion(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("02", "W")
+        secours = simulation.obtenir_secours("02")
+        secours.distance = secours.passage[0] - 240
+        tete = simulation.ajouter_voiture("N", "straight")
+        tete.distance = tete.passage[0] - 100
+        tete.decalage_lateral = DECALAGE_RANGEMENT
+        tete.cede_aux = ("02",)
+        suivante = simulation.ajouter_voiture("N", "straight")
+        suivante.distance = tete.distance - DISTANCE_SECURITE
+        initiale = suivante.distance
+        maintenu = False
         for _ in range(1200):
-            sim.advance(STEP)
-            self.assertGreaterEqual(leader.distance - follower.distance, GAP - 1e-6)
-            held |= follower.waiting
-            assert_spacing(self, sim)
-        self.assertTrue(held)
-        self.assertGreater(follower.distance, initial + 200)
-        self.assertEqual(leader.lateral_offset, 0)
-        self.assertEqual(follower.lateral_offset, 0)
+            simulation.avancer(PAS_TEMPS)
+            self.assertGreaterEqual(tete.distance - suivante.distance, DISTANCE_SECURITE - 1e-6)
+            maintenu |= suivante.en_attente
+            verifier_espacement(self, simulation)
+        self.assertTrue(maintenu)
+        self.assertGreater(suivante.distance, initiale + 200)
+        self.assertEqual(tete.decalage_lateral, 0)
+        self.assertEqual(suivante.decalage_lateral, 0)
 
-    def test_lateral_motion_requires_forward_motion_and_visible_steering(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("02", "W")
-        rescue = sim.get_rescue("02")
-        rescue.distance = rescue.crossing[0] - 120
-        car = sim.spawn("N", "straight")
-        car.distance = car.crossing[0] - car.manoeuvre_length
-        rescue.distance = rescue.crossing[0] - car.manoeuvre_length - 120
-        turned = False
-        parked = False
+    def test_rangement_en_avancant_avec_braquage_visible(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("02", "W")
+        secours = simulation.obtenir_secours("02")
+        secours.distance = secours.passage[0] - 120
+        voiture = simulation.ajouter_voiture("N", "straight")
+        voiture.distance = voiture.passage[0] - voiture.longueur_manoeuvre
+        secours.distance = secours.passage[0] - voiture.longueur_manoeuvre - 120
+        a_tourne = False
+        gare = False
         for _ in range(300):
-            previous = car.distance, car.lateral_offset
-            sim.advance(STEP)
-            if abs(car.lateral_offset - previous[1]) > 1e-7:
-                self.assertGreater(car.distance, previous[0])
-                heading = car.route.sample(car.distance)[2]
-                turned |= cos(radians(car.position[2] - heading)) < .99
-            if car.yielding_to and car.manoeuvre_start is None:
-                parked |= car.waiting and car.current_speed == 0
-            assert_spacing(self, sim)
-        self.assertTrue(turned)
-        self.assertTrue(parked)
-        self.assertEqual(car.lateral_offset, 0)
+            precedent = voiture.distance, voiture.decalage_lateral
+            simulation.avancer(PAS_TEMPS)
+            if abs(voiture.decalage_lateral - precedent[1]) > 1e-7:
+                self.assertGreater(voiture.distance, precedent[0])
+                orientation = voiture.trajet.position_a(voiture.distance)[2]
+                a_tourne |= cos(radians(voiture.position[2] - orientation)) < .99
+            if voiture.cede_aux and voiture.debut_manoeuvre is None:
+                gare |= voiture.en_attente and voiture.vitesse_actuelle == 0
+            verifier_espacement(self, simulation)
+        self.assertTrue(a_tourne)
+        self.assertTrue(gare)
+        self.assertEqual(voiture.decalage_lateral, 0)
 
-    def test_rescues_are_faster_than_cars_even_when_cars_turn(self):
-        sim = Simulation(rate=0)
-        car = sim.spawn("N", "right")
-        self.assertGreater(RESCUE_SPEED, 40)
-        for rescue in sim.rescues:
-            self.assertGreater(rescue.speed, car.speed)
-            self.assertGreater(rescue.speed, 40)
-        sim.start_mission("01", "N")
-        rescue = sim.get_rescue("01")
-        self.assertAlmostEqual(rescue.total_estimate, rescue.route.length / rescue.speed + 8)
+    def test_secours_plus_rapides_meme_en_virage(self):
+        simulation = Simulation(debit=0)
+        voiture = simulation.ajouter_voiture("N", "right")
+        self.assertGreater(VITESSE_SECOURS, 40)
+        for secours in simulation.secours:
+            self.assertGreater(secours.vitesse, voiture.vitesse)
+            self.assertGreater(secours.vitesse, 40)
+        simulation.demarrer_mission("01", "N")
+        secours = simulation.obtenir_secours("01")
+        self.assertAlmostEqual(secours.duree_estimee, secours.trajet.longueur / secours.vitesse + 8)
 
-    def test_rescue_enters_when_car_still_crossing_is_outside_its_path(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("01", "W")
-        rescue = sim.get_rescue("01")
-        rescue.distance = rescue.crossing[0]
-        car = sim.spawn("N", "straight")
-        car.distance = car.crossing[1] - 40
-        sim.crossing_owners.add(car.identifier)
-        sim.advance(STEP)
-        self.assertIn(car.identifier, sim.crossing_owners)
-        self.assertIn(rescue.identifier, sim.crossing_owners)
-        self.assertGreater(rescue.current_speed, 0)
-        assert_spacing(self, sim)
+    def test_secours_entre_si_voiture_engagee_hors_trajectoire(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("01", "W")
+        secours = simulation.obtenir_secours("01")
+        secours.distance = secours.passage[0]
+        voiture = simulation.ajouter_voiture("N", "straight")
+        voiture.distance = voiture.passage[1] - 40
+        simulation.vehicules_engages.add(voiture.identifiant)
+        simulation.avancer(PAS_TEMPS)
+        self.assertIn(voiture.identifiant, simulation.vehicules_engages)
+        self.assertIn(secours.identifiant, simulation.vehicules_engages)
+        self.assertGreater(secours.vitesse_actuelle, 0)
+        verifier_espacement(self, simulation)
 
-    def test_parked_exit_queue_clears_carrefour_before_priority_green(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("01", "E")
-        rescue = sim.get_rescue("01")
-        rescue.visited = True
-        rescue.crossing_index = 1
-        rescue.distance = rescue.crossing[0]
-        leader = sim.spawn("S", "straight")
-        leader.distance = leader.crossing[1] + 34
-        leader.crossing_index = 1
-        leader.lateral_offset = PULL_OVER
-        leader.yielding_to = ("01",)
-        follower = sim.spawn("S", "straight")
-        follower.distance = follower.crossing[1] - 10
-        sim.crossing_owners.add(follower.identifier)
-        entered = False
+    def test_file_rangee_en_sortie_degage_avant_vert_prioritaire(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("01", "E")
+        secours = simulation.obtenir_secours("01")
+        secours.intervention_effectuee = True
+        secours.indice_passage = 1
+        secours.distance = secours.passage[0]
+        tete = simulation.ajouter_voiture("S", "straight")
+        tete.distance = tete.passage[1] + 34
+        tete.indice_passage = 1
+        tete.decalage_lateral = DECALAGE_RANGEMENT
+        tete.cede_aux = ("01",)
+        suivante = simulation.ajouter_voiture("S", "straight")
+        suivante.distance = suivante.passage[1] - 10
+        simulation.vehicules_engages.add(suivante.identifiant)
+        est_entre = False
         for _ in range(200):
-            sim.advance(STEP)
-            assert_spacing(self, sim)
-            entered |= rescue.identifier in sim.crossing_owners
-        self.assertNotIn(follower.identifier, sim.crossing_owners)
-        self.assertTrue(entered)
+            simulation.avancer(PAS_TEMPS)
+            verifier_espacement(self, simulation)
+            est_entre |= secours.identifiant in simulation.vehicules_engages
+        self.assertNotIn(suivante.identifiant, simulation.vehicules_engages)
+        self.assertTrue(est_entre)
 
-    def test_returning_rescue_leaves_junction_with_close_follower(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("02", "N")
-        rescue = sim.get_rescue("02")
-        rescue.visited = True
-        rescue.crossing_index = 2
-        stop, end, key = [zone for zone in rescue.route.junctions if zone[2] == "F"][-1]
-        rescue.distance = stop
-        car = sim.spawn("S", "straight")
-        car.crossing_index = 1
-        exit_distance = car.crossings[0][1]
-        car.distance = exit_distance + car.route.sample(exit_distance)[1] - 332
-        self.assertTrue(sim._junction_clear(rescue, stop, end, key))
+    def test_secours_retour_quitte_raccordement_avec_suivante_proche(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("02", "N")
+        secours = simulation.obtenir_secours("02")
+        secours.intervention_effectuee = True
+        secours.indice_passage = 2
+        arret, fin, cle = [zone for zone in secours.trajet.raccordements if zone[2] == "F"][-1]
+        secours.distance = arret
+        voiture = simulation.ajouter_voiture("S", "straight")
+        voiture.indice_passage = 1
+        distance_sortie = voiture.passages[0][1]
+        voiture.distance = distance_sortie + voiture.trajet.position_a(distance_sortie)[1] - 332
+        self.assertTrue(simulation._raccordement_libre(secours, arret, fin, cle))
         for _ in range(160):
-            sim.advance(STEP)
-            assert_spacing(self, sim)
-        self.assertFalse(rescue.busy)
+            simulation.avancer(PAS_TEMPS)
+            verifier_espacement(self, simulation)
+        self.assertFalse(secours.occupe)
 
-    def test_tiny_remaining_distance_does_not_block_arrival_at_intervention(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("02", "N")
-        rescue = sim.get_rescue("02")
-        rescue.distance = rescue.hospital - 1e-10
-        rescue.crossing_index = 1
-        sim.advance(STEP)
-        self.assertTrue(rescue.visited)
-        self.assertEqual(rescue.distance, rescue.hospital)
-        self.assertEqual(rescue.dwell_remaining, 8)
-        sim.advance(8 + 2 * STEP)
-        self.assertGreater(rescue.distance, rescue.hospital)
+    def test_arrivee_intervention_avec_residu_flottant(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("02", "N")
+        secours = simulation.obtenir_secours("02")
+        secours.distance = secours.arret_intervention - 1e-10
+        secours.indice_passage = 1
+        simulation.avancer(PAS_TEMPS)
+        self.assertTrue(secours.intervention_effectuee)
+        self.assertEqual(secours.distance, secours.arret_intervention)
+        self.assertEqual(secours.temps_intervention_restant, 8)
+        simulation.avancer(8 + 2 * PAS_TEMPS)
+        self.assertGreater(secours.distance, secours.arret_intervention)
 
-    def test_tiny_remaining_distance_does_not_block_return_to_station(self):
-        sim = Simulation(rate=0)
-        sim.start_mission("01", "E")
-        rescue = sim.get_rescue("01")
-        rescue.visited = True
-        rescue.crossing_index = 2
-        rescue.distance = rescue.route.length - 1e-10
-        sim.advance(STEP)
-        self.assertFalse(rescue.busy)
-        self.assertEqual(rescue.distance, 0)
-        self.assertIn(("01", "disponible"), sim.drain_events())
+    def test_retour_caserne_avec_residu_flottant(self):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission("01", "E")
+        secours = simulation.obtenir_secours("01")
+        secours.intervention_effectuee = True
+        secours.indice_passage = 2
+        secours.distance = secours.trajet.longueur - 1e-10
+        simulation.avancer(PAS_TEMPS)
+        self.assertFalse(secours.occupe)
+        self.assertEqual(secours.distance, 0)
+        self.assertIn(("01", "disponible"), simulation.recuperer_evenements())
 
-    def test_dense_traffic_with_repeated_missions_keeps_progress_and_clears_red(self):
-        schedule = {60: ("02", "N"), 62: ("01", "E"),
+    def test_trafic_dense_et_missions_repetees_sans_blocage_rouge(self):
+        programme_missions = {60: ("02", "N"), 62: ("01", "E"),
                     230: ("02", "S"), 232: ("01", "W"),
                     400: ("02", "E"), 402: ("01", "N")}
-        for seed in (51, 302):
-            with self.subTest(seed=seed):
-                sim = Simulation(rate=60, seed=seed)
-                started = {}
-                for step in range(1200):
-                    second = step / 2
-                    if second in schedule:
-                        identifier, destination = schedule[second]
-                        self.assertTrue(sim.start_mission(identifier, destination))
-                        started[identifier] = sim.time
-                    sim.advance(.5)
-                    assert_spacing(self, sim)
-                    if sim.lights.phase == "all_red":
-                        self.assertLess(sim.lights.elapsed, 20, (sim.time, sim.crossing_owners))
-                    for rescue in sim.rescues:
-                        if rescue.busy:
-                            self.assertLess(sim.time - started[rescue.identifier], 165,
-                                            (sim.time, rescue.identifier, rescue.destination))
-                self.assertTrue(all(not rescue.busy for rescue in sim.rescues))
-                before = sim.completed
-                sim.advance(40)
-                self.assertGreater(sim.completed, before)
+        for graine in (51, 302):
+            with self.subTest(graine=graine):
+                simulation = Simulation(debit=60, graine=graine)
+                demarre = {}
+                for pas in range(1200):
+                    second = pas / 2
+                    if second in programme_missions:
+                        identifiant, destination = programme_missions[second]
+                        self.assertTrue(simulation.demarrer_mission(identifiant, destination))
+                        demarre[identifiant] = simulation.temps
+                    simulation.avancer(.5)
+                    verifier_espacement(self, simulation)
+                    if simulation.feux.phase == "all_red":
+                        self.assertLess(simulation.feux.temps_ecoule, 20, (simulation.temps, simulation.vehicules_engages))
+                    for secours in simulation.secours:
+                        if secours.occupe:
+                            self.assertLess(simulation.temps - demarre[secours.identifiant], 165,
+                                            (simulation.temps, secours.identifiant, secours.destination))
+                self.assertTrue(all(not secours.occupe for secours in simulation.secours))
+                avant = simulation.trajets_termines
+                simulation.avancer(40)
+                self.assertGreater(simulation.trajets_termines, avant)
 
 
 if __name__ == "__main__":

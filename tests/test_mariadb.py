@@ -4,73 +4,73 @@ import os
 import unittest
 from uuid import uuid4
 
-from src.reseau.client import StateClient
-from src.reseau.serveur import CoordinationServer
-from src.stockage.mariadb import MariaDBStore
-from test_network import wait_for
+from src.reseau.client import ClientEtats
+from src.reseau.serveur import ServeurCentre
+from src.stockage.mariadb import StockageMariaDB
+from test_reseau import attendre
 
 
 @unittest.skipUnless(os.environ.get("SAE_TEST_DB_NAME"), "Configurer une base MariaDB de test dediee")
-class MariaDBTests(unittest.TestCase):
+class TestsMariaDB(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        name = os.environ["SAE_TEST_DB_NAME"]
-        if not name.endswith("_test"):
+        nom = os.environ["SAE_TEST_DB_NAME"]
+        if not nom.endswith("_test"):
             raise ValueError("Les tests effacent leurs tables : utiliser une base terminee par _test")
-        cls.config = {
+        cls.configuration = {
             "host": os.environ.get("SAE_TEST_DB_HOST", "127.0.0.1"),
             "port": int(os.environ.get("SAE_TEST_DB_PORT", "3306")),
             "user": os.environ.get("SAE_TEST_DB_USER", "sae302_test"),
             "password": os.environ["SAE_TEST_DB_PASSWORD"],
-            "database": name, "charset": "utf8mb4",
+            "database": nom, "charset": "utf8mb4",
             "connect_timeout": 3, "read_timeout": 3, "write_timeout": 3,
         }
-        cls.store = MariaDBStore(cls.config)
-        cls.store.initialize()
+        cls.stockage = StockageMariaDB(cls.configuration)
+        cls.stockage.initialiser()
 
     def setUp(self):
-        with self.store.connect() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("DELETE FROM historique_etats")
-                cursor.execute("DELETE FROM vehicules")
-            connection.commit()
+        with self.stockage.ouvrir_connexion() as liaison:
+            with liaison.cursor() as curseur:
+                curseur.execute("DELETE FROM historique_etats")
+                curseur.execute("DELETE FROM vehicules")
+            liaison.commit()
 
-    def test_persistence_stale_updates_and_session_restart(self):
+    def test_persistance_refus_anciens_etats_et_nouvelle_session(self):
         session = str(uuid4())
         message = {"type": "etat", "id": "01", "etat": "occupe", "numero": 2, "session": session}
-        self.assertTrue(self.store.save(message))
-        self.assertFalse(self.store.save(message))
-        self.assertFalse(self.store.save({**message, "numero": 1, "etat": "disponible"}))
-        self.store.save({**message, "id": "02", "etat": "disponible"})
-        reopened = MariaDBStore(self.config)
-        snapshot = reopened.snapshot()
-        self.assertEqual(len(snapshot["history"]), 2)
-        self.assertEqual([(r["identifiant"], r["etat"]) for r in snapshot["vehicles"]],
+        self.assertTrue(self.stockage.enregistrer(message))
+        self.assertFalse(self.stockage.enregistrer(message))
+        self.assertFalse(self.stockage.enregistrer({**message, "numero": 1, "etat": "disponible"}))
+        self.stockage.enregistrer({**message, "id": "02", "etat": "disponible"})
+        rouvert = StockageMariaDB(self.configuration)
+        instantane = rouvert.instantane()
+        self.assertEqual(len(instantane["history"]), 2)
+        self.assertEqual([(r["identifiant"], r["etat"]) for r in instantane["vehicles"]],
                          [("01", "occupe"), ("02", "disponible")])
-        self.assertTrue(reopened.save({**message, "session": str(uuid4()), "numero": 1, "etat": "disponible"}))
-        self.assertEqual(len(reopened.snapshot()["history"]), 3)
+        self.assertTrue(rouvert.enregistrer({**message, "session": str(uuid4()), "numero": 1, "etat": "disponible"}))
+        self.assertEqual(len(rouvert.instantane()["history"]), 3)
 
-    def test_real_tcp_and_database_restart(self):
-        server = CoordinationServer(self.store, "127.0.0.1", 0)
-        server.start()
-        self.addCleanup(server.close)
-        client = StateClient("127.0.0.1", server.port)
-        client.publish("01", "occupe")
-        client.publish("02", "disponible")
-        client.start()
-        self.addCleanup(client.close)
-        wait_for(lambda: client.snapshot()[1] == 0 and server.snapshot()["seen"] == {"01", "02"})
-        self.assertEqual(len(self.store.snapshot()["history"]), 2)
-        server.close()
-        client.publish("01", "disponible")
-        client.publish("02", "occupe")
-        replacement = CoordinationServer(MariaDBStore(self.config), "127.0.0.1", server.port)
-        replacement.start()
-        self.addCleanup(replacement.close)
-        wait_for(lambda: client.snapshot()[1] == 0 and replacement.snapshot()["seen"] == {"01", "02"})
-        snapshot = self.store.snapshot()
-        self.assertEqual(len(snapshot["history"]), 4)
-        self.assertEqual([r["etat"] for r in snapshot["vehicles"]], ["disponible", "occupe"])
-        client.close()
-        wait_for(lambda: not replacement.snapshot()["connected"])
-        self.assertEqual([r["etat"] for r in self.store.snapshot()["vehicles"]], ["disponible", "occupe"])
+    def test_tcp_reel_et_reouverture_base(self):
+        serveur = ServeurCentre(self.stockage, "127.0.0.1", 0)
+        serveur.demarrer()
+        self.addCleanup(serveur.fermer)
+        client = ClientEtats("127.0.0.1", serveur.port)
+        client.publier("01", "occupe")
+        client.publier("02", "disponible")
+        client.demarrer()
+        self.addCleanup(client.fermer)
+        attendre(lambda: client.instantane()[1] == 0 and serveur.instantane()["seen"] == {"01", "02"})
+        self.assertEqual(len(self.stockage.instantane()["history"]), 2)
+        serveur.fermer()
+        client.publier("01", "disponible")
+        client.publier("02", "occupe")
+        remplacant = ServeurCentre(StockageMariaDB(self.configuration), "127.0.0.1", serveur.port)
+        remplacant.demarrer()
+        self.addCleanup(remplacant.fermer)
+        attendre(lambda: client.instantane()[1] == 0 and remplacant.instantane()["seen"] == {"01", "02"})
+        instantane = self.stockage.instantane()
+        self.assertEqual(len(instantane["history"]), 4)
+        self.assertEqual([r["etat"] for r in instantane["vehicles"]], ["disponible", "occupe"])
+        client.fermer()
+        attendre(lambda: not remplacant.instantane()["connected"])
+        self.assertEqual([r["etat"] for r in self.stockage.instantane()["vehicles"]], ["disponible", "occupe"])

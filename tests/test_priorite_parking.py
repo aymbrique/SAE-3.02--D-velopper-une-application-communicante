@@ -2,94 +2,94 @@
 
 import unittest
 
-from src.modeles.plan import DESTINATIONS, on_road
-from src.simulation.moteur import DWELL, STEP, Simulation
-from traffic_checks import assert_spacing
+from src.modeles.plan import DESTINATIONS, sur_chaussee
+from src.simulation.moteur import DUREE_INTERVENTION, PAS_TEMPS, Simulation
+from controles_circulation import verifier_espacement
 
 
-class ParkingPriorityTests(unittest.TestCase):
-    def parked_rescue(self, destination, identifier="01"):
-        sim = Simulation(rate=0)
-        sim.start_mission(identifier, destination)
-        rescue = sim.get_rescue(identifier)
-        rescue.distance = rescue.hospital
-        rescue.crossing_index = 1
-        rescue.visited = True
-        rescue.dwell_remaining = DWELL
-        return sim, rescue
+class TestsPrioriteParking(unittest.TestCase):
+    def secours_gare(self, destination, identifiant="01"):
+        simulation = Simulation(debit=0)
+        simulation.demarrer_mission(identifiant, destination)
+        secours = simulation.obtenir_secours(identifiant)
+        secours.distance = secours.arret_intervention
+        secours.indice_passage = 1
+        secours.intervention_effectuee = True
+        secours.temps_intervention_restant = DUREE_INTERVENTION
+        return simulation, secours
 
-    def test_no_return_request_while_still_driving_to_intervention(self):
+    def test_aucune_demande_retour_pendant_aller(self):
         for destination in DESTINATIONS:
             with self.subTest(destination=destination):
-                sim, rescue = self.parked_rescue(destination)
-                rescue.visited = False
-                rescue.dwell_remaining = 0
+                simulation, secours = self.secours_gare(destination)
+                secours.intervention_effectuee = False
+                secours.temps_intervention_restant = 0
                 # Apres la sortie du carrefour, le prochain passage est le
                 # retour, mais le secours doit d'abord atteindre le patient.
-                start = rescue.crossings[0][1]
-                for distance in range(int(start) + 1, int(rescue.hospital), 5):
-                    rescue.distance = distance
-                    self.assertEqual(sim.requests(), [], (destination, distance))
+                debut = secours.passages[0][1]
+                for distance in range(int(debut) + 1, int(secours.arret_intervention), 5):
+                    secours.distance = distance
+                    self.assertEqual(simulation.demandes(), [], (destination, distance))
 
-    def test_parked_rescue_neither_holds_lights_nor_increases_debt(self):
+    def test_secours_gare_ne_reserve_pas_feux_ni_temps(self):
         for destination in DESTINATIONS:
             with self.subTest(destination=destination):
-                sim, rescue = self.parked_rescue(destination)
-                sim.lights.axis = rescue.crossing[2]
-                sim.lights.elapsed = 12
-                sim.lights.debt.update(NS=3, EW=0)
-                debt = dict(sim.lights.debt)
-                for _ in range(round(DWELL / STEP)):
-                    self.assertEqual(sim.requests(), [])
-                    sim.advance(STEP)
-                    self.assertIsNone(sim.lights.owner)
-                    self.assertEqual(rescue.distance, rescue.hospital)
-                    for axis in debt:
-                        self.assertLessEqual(sim.lights.debt[axis], debt[axis])
-                self.assertTrue(rescue.busy)
+                simulation, secours = self.secours_gare(destination)
+                simulation.feux.axe = secours.passage[2]
+                simulation.feux.temps_ecoule = 12
+                simulation.feux.reserve_temps.update(NS=3, EW=0)
+                reserve_temps = dict(simulation.feux.reserve_temps)
+                for _ in range(round(DUREE_INTERVENTION / PAS_TEMPS)):
+                    self.assertEqual(simulation.demandes(), [])
+                    simulation.avancer(PAS_TEMPS)
+                    self.assertIsNone(simulation.feux.prioritaire)
+                    self.assertEqual(secours.distance, secours.arret_intervention)
+                    for axe in reserve_temps:
+                        self.assertLessEqual(simulation.feux.reserve_temps[axe], reserve_temps[axe])
+                self.assertTrue(secours.occupe)
 
-    def test_return_requests_only_back_on_road_and_near_crossing(self):
+    def test_demande_retour_sur_route_et_proche_carrefour(self):
         for destination in DESTINATIONS:
             with self.subTest(destination=destination):
-                sim, rescue = self.parked_rescue(destination)
-                rescue.dwell_remaining = 0
-                saw_driveway = saw_road = saw_request = False
+                simulation, secours = self.secours_gare(destination)
+                secours.temps_intervention_restant = 0
+                a_vu_allee = a_vu_route = a_vu_demande = False
                 # Parcourir tout le retour au carrefour, y compris l'allee.
-                for distance in range(int(rescue.hospital) + 1, int(rescue.crossing[0])):
-                    rescue.distance = distance
-                    road = on_road(*rescue.position[:2])
-                    metres, eta = sim.approach(rescue)
-                    expected = road and (metres <= 150 or eta <= 10)
-                    requests = sim.requests()
-                    self.assertEqual(bool(requests), expected, (destination, distance))
-                    saw_driveway |= not road
-                    saw_road |= road
-                    saw_request |= bool(requests)
-                    if requests:
-                        self.assertEqual(requests[0].started_at, rescue.started_at)
-                self.assertTrue(saw_driveway and saw_road and saw_request)
+                for distance in range(int(secours.arret_intervention) + 1, int(secours.passage[0])):
+                    secours.distance = distance
+                    route = sur_chaussee(*secours.position[:2])
+                    metres, delai_arrivee = simulation.approche(secours)
+                    attendu = route and (metres <= 150 or delai_arrivee <= 10)
+                    demandes = simulation.demandes()
+                    self.assertEqual(bool(demandes), attendu, (destination, distance))
+                    a_vu_allee |= not route
+                    a_vu_route |= route
+                    a_vu_demande |= bool(demandes)
+                    if demandes:
+                        self.assertEqual(demandes[0].debut_mission, secours.debut_mission)
+                self.assertTrue(a_vu_allee and a_vu_route and a_vu_demande)
 
-    def test_second_rescue_passes_while_older_mission_is_parked_at_town_hall(self):
-        for parked_id in ("01", "02"):
-            for returning in (False, True):
-                with self.subTest(parked=parked_id, second_returning=returning):
-                    sim, parked = self.parked_rescue("W", parked_id)
-                    sim.time = 30
-                    second_id = "02" if parked_id == "01" else "01"
-                    sim.start_mission(second_id, "E")
-                    second = sim.get_rescue(second_id)
-                    second.visited = returning
-                    second.crossing_index = int(returning)
-                    second.distance = second.crossing[0]
-                    sim.lights.axis = "EW"
+    def test_second_secours_passe_pendant_soins_du_premier_a_mairie(self):
+        for identifiant_gare in ("01", "02"):
+            for en_retour in (False, True):
+                with self.subTest(gare=identifiant_gare, second_returning=en_retour):
+                    simulation, gare = self.secours_gare("W", identifiant_gare)
+                    simulation.temps = 30
+                    identifiant_second = "02" if identifiant_gare == "01" else "01"
+                    simulation.demarrer_mission(identifiant_second, "E")
+                    second = simulation.obtenir_secours(identifiant_second)
+                    second.intervention_effectuee = en_retour
+                    second.indice_passage = int(en_retour)
+                    second.distance = second.passage[0]
+                    simulation.feux.axe = "EW"
                     for _ in range(140):
-                        sim.advance(STEP)
-                        assert_spacing(self, sim)
-                        self.assertGreater(parked.dwell_remaining, 0)
-                        self.assertEqual(parked.distance, parked.hospital)
-                        self.assertEqual(sim.lights.owner.identifier, second_id)
-                        if second.identifier in sim.crossing_owners:
-                            self.assertEqual(sim.lights.signal(second.crossing[2]), "green")
+                        simulation.avancer(PAS_TEMPS)
+                        verifier_espacement(self, simulation)
+                        self.assertGreater(gare.temps_intervention_restant, 0)
+                        self.assertEqual(gare.distance, gare.arret_intervention)
+                        self.assertEqual(simulation.feux.prioritaire.identifiant, identifiant_second)
+                        if second.identifiant in simulation.vehicules_engages:
+                            self.assertEqual(simulation.feux.signal(second.passage[2]), "green")
                             break
                     else:
                         self.fail("Le secours gare a empeche le second de passer.")

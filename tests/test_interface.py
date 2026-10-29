@@ -8,116 +8,116 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtWidgets import QApplication
 
-from src.interface.fenetre_simulation import MainWindow
-from src.interface.fenetre_centre import CoordinationWindow
-from src.reseau.client import StateClient
-from src.reseau.serveur import CoordinationServer
-from test_network import MemoryStore, wait_for
+from src.interface.fenetre_simulation import FenetreSimulation
+from src.interface.fenetre_centre import FenetreCentre
+from src.reseau.client import ClientEtats
+from src.reseau.serveur import ServeurCentre
+from test_reseau import StockageMemoire, attendre
 
 
-class InterfaceTests(unittest.TestCase):
+class TestsInterface(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
+        cls.application = QApplication.instance() or QApplication([])
 
-    def test_controls_rate_limit_pause_speed_and_reset(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
-        window.show()
-        self.app.processEvents()
-        self.assertEqual(window.speed_input.currentText(), "x1")
-        self.assertEqual(window.speed, 2)
-        window.rate_input.setValue(30)
-        self.assertEqual(window.rate_input.value(), 25)
-        self.assertEqual(window.scenario.rate, 25)
-        window.speed_input.setCurrentIndex(2)
-        self.assertEqual(window.speed, 3)
-        window.play_button.click()
+    def test_commandes_limite_debit_pause_vitesse_et_reinitialisation(self):
+        fenetre = FenetreSimulation()
+        self.addCleanup(fenetre.close)
+        fenetre.show()
+        self.application.processEvents()
+        self.assertEqual(fenetre.choix_vitesse.currentText(), "x1")
+        self.assertEqual(fenetre.vitesse, 2)
+        fenetre.choix_debit.setValue(30)
+        self.assertEqual(fenetre.choix_debit.value(), 25)
+        self.assertEqual(fenetre.scenario.debit, 25)
+        fenetre.choix_vitesse.setCurrentIndex(2)
+        self.assertEqual(fenetre.vitesse, 3)
+        fenetre.bouton_demarrer.click()
         QTest.qWait(200)
-        self.assertGreater(window.elapsed, 0)
-        window.play_button.click()
-        paused = window.elapsed
+        self.assertGreater(fenetre.temps_ecoule, 0)
+        fenetre.bouton_demarrer.click()
+        en_pause = fenetre.temps_ecoule
         QTest.qWait(80)
-        self.assertEqual(window.elapsed, paused)
-        window.reset_button.click()
-        self.assertEqual(window.elapsed, 0)
-        self.assertFalse(window.playing)
-        self.assertEqual(window.scenario.rate, 25)
+        self.assertEqual(fenetre.temps_ecoule, en_pause)
+        fenetre.bouton_recommencer.click()
+        self.assertEqual(fenetre.temps_ecoule, 0)
+        self.assertFalse(fenetre.en_cours)
+        self.assertEqual(fenetre.scenario.debit, 25)
 
-    def test_horizontal_and_vertical_accumulation_counters(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
-        lights = window.scenario.lights
-        from src.simulation.feux import Request
+    def test_compteurs_reserves_horizontale_et_verticale(self):
+        fenetre = FenetreSimulation()
+        self.addCleanup(fenetre.close)
+        feux = fenetre.scenario.feux
+        from src.simulation.feux import DemandePriorite
         # Un vert NS prolonge a 22 s doit stocker 14 s sur la ligne horizontale.
         for _ in range(440):
-            lights.advance(.05, [Request("02", "NS", 0, 0)], busy=True)
-        window.refresh()
-        self.assertEqual(window.accumulation_labels["EW"].text(), "14.0 s stockees")
-        self.assertEqual(window.accumulation_labels["NS"].text(), "0.0 s stockees")
+            feux.avancer(.05, [DemandePriorite("02", "NS", 0, 0)], occupe=True)
+        fenetre.actualiser()
+        self.assertEqual(fenetre.etiquettes_reserves["EW"].text(), "14.0 s stockees")
+        self.assertEqual(fenetre.etiquettes_reserves["NS"].text(), "0.0 s stockees")
         # La pause ne consomme rien ; recommencer remet bien les deux a zero.
         QTest.qWait(80)
-        window.refresh()
-        self.assertEqual(window.accumulation_labels["EW"].text(), "14.0 s stockees")
-        window.reset_button.click()
-        self.assertEqual(window.accumulation_labels["EW"].text(), "0.0 s stockees")
-        self.assertEqual(window.accumulation_labels["NS"].text(), "0.0 s stockees")
+        fenetre.actualiser()
+        self.assertEqual(fenetre.etiquettes_reserves["EW"].text(), "14.0 s stockees")
+        fenetre.bouton_recommencer.click()
+        self.assertEqual(fenetre.etiquettes_reserves["EW"].text(), "0.0 s stockees")
+        self.assertEqual(fenetre.etiquettes_reserves["NS"].text(), "0.0 s stockees")
 
-    def test_new_cars_start_outside_view_after_resize(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
-        window.timer.stop()
-        window.show()
-        window.playing = True
-        for width, height in ((960, 680), (1600, 680), (1100, 720)):
-            window.resize(width, height)
-            self.app.processEvents()
-            window._tick()
-            for origin in "NSEW":
-                with self.subTest(size=(width, height), origin=origin):
-                    window.scenario.cars.clear()
-                    car = window.scenario.spawn(origin, "straight")
-                    point = window.view.mapFromScene(QPointF(*car.position[:2]))
-                    self.assertFalse(window.view.viewport().rect().contains(point))
+    def test_arrivees_hors_carte_apres_redimensionnement(self):
+        fenetre = FenetreSimulation()
+        self.addCleanup(fenetre.close)
+        fenetre.minuteur.stop()
+        fenetre.show()
+        fenetre.en_cours = True
+        for largeur, hauteur in ((960, 680), (1600, 680), (1100, 720)):
+            fenetre.resize(largeur, hauteur)
+            self.application.processEvents()
+            fenetre._actualiser_simulation()
+            for origine in "NSEW":
+                with self.subTest(taille=(largeur, hauteur), origine=origine):
+                    fenetre.scenario.voitures.clear()
+                    voiture = fenetre.scenario.ajouter_voiture(origine, "straight")
+                    point = fenetre.vue.mapFromScene(QPointF(*voiture.position[:2]))
+                    self.assertFalse(fenetre.vue.viewport().rect().contains(point))
 
-    def test_mission_buttons_return_and_reset_reach_the_center(self):
-        store = MemoryStore()
-        server = CoordinationServer(store, "127.0.0.1", 0)
-        server.start()
-        self.addCleanup(server.close)
-        client = StateClient("127.0.0.1", server.port)
-        client.start()
-        self.addCleanup(client.close)
-        window = MainWindow(client)
-        center = CoordinationWindow(server)
-        self.addCleanup(center.close)
-        self.addCleanup(window.close)
-        for identifier in ("01", "02"):
-            window.rescue_combo.setCurrentIndex(window.rescue_combo.findData(identifier))
-            destination = "E" if identifier == "01" else "W"
-            window.destination_combo.setCurrentIndex(window.destination_combo.findData(destination))
-            window.send_button.click()
-            self.assertFalse(window.send_button.isEnabled())
-            self.assertEqual(window.scenario.get_rescue(identifier).destination, destination)
-        wait_for(lambda: client.snapshot()[1] == 0)
-        center.refresh()
-        self.assertEqual(center.states.item(0, 1).text(), "occupe")
-        self.assertEqual(center.states.item(1, 1).text(), "occupe")
-        window.scenario.advance(300)
-        window.elapsed = window.scenario.time
-        window._publish_events()
-        window.refresh()
-        wait_for(lambda: client.snapshot()[1] == 0)
-        center.refresh()
-        for index, identifier in enumerate(("01", "02")):
-            self.assertEqual(center.states.item(index, 1).text(), "disponible")
-            window.rescue_combo.setCurrentIndex(window.rescue_combo.findData(identifier))
-            self.assertTrue(window.send_button.isEnabled())
-        window.rescue_combo.setCurrentIndex(0)
-        window.send_button.click()
-        window.reset_button.click()
-        wait_for(lambda: client.snapshot()[1] == 0)
-        center.refresh()
-        self.assertEqual(center.states.item(0, 1).text(), "disponible")
-        self.assertEqual(center.states.item(1, 1).text(), "disponible")
-        self.assertEqual(len(store.history), 7)
+    def test_envoi_mission_retour_et_reinitialisation_transmis_au_centre(self):
+        stockage = StockageMemoire()
+        serveur = ServeurCentre(stockage, "127.0.0.1", 0)
+        serveur.demarrer()
+        self.addCleanup(serveur.fermer)
+        client = ClientEtats("127.0.0.1", serveur.port)
+        client.demarrer()
+        self.addCleanup(client.fermer)
+        fenetre = FenetreSimulation(client)
+        centre = FenetreCentre(serveur)
+        self.addCleanup(centre.close)
+        self.addCleanup(fenetre.close)
+        for identifiant in ("01", "02"):
+            fenetre.choix_secours.setCurrentIndex(fenetre.choix_secours.findData(identifiant))
+            destination = "E" if identifiant == "01" else "W"
+            fenetre.choix_destination.setCurrentIndex(fenetre.choix_destination.findData(destination))
+            fenetre.bouton_envoi.click()
+            self.assertFalse(fenetre.bouton_envoi.isEnabled())
+            self.assertEqual(fenetre.scenario.obtenir_secours(identifiant).destination, destination)
+        attendre(lambda: client.instantane()[1] == 0)
+        centre.actualiser()
+        self.assertEqual(centre.etats.item(0, 1).text(), "occupe")
+        self.assertEqual(centre.etats.item(1, 1).text(), "occupe")
+        fenetre.scenario.avancer(300)
+        fenetre.temps_ecoule = fenetre.scenario.temps
+        fenetre._publier_evenements()
+        fenetre.actualiser()
+        attendre(lambda: client.instantane()[1] == 0)
+        centre.actualiser()
+        for index, identifiant in enumerate(("01", "02")):
+            self.assertEqual(centre.etats.item(index, 1).text(), "disponible")
+            fenetre.choix_secours.setCurrentIndex(fenetre.choix_secours.findData(identifiant))
+            self.assertTrue(fenetre.bouton_envoi.isEnabled())
+        fenetre.choix_secours.setCurrentIndex(0)
+        fenetre.bouton_envoi.click()
+        fenetre.bouton_recommencer.click()
+        attendre(lambda: client.instantane()[1] == 0)
+        centre.actualiser()
+        self.assertEqual(centre.etats.item(0, 1).text(), "disponible")
+        self.assertEqual(centre.etats.item(1, 1).text(), "disponible")
+        self.assertEqual(len(stockage.historique), 7)
