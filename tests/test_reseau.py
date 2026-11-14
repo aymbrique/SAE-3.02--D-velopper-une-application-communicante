@@ -41,9 +41,9 @@ def attendre(condition, delai_max=8):
         time.sleep(.02)
     raise AssertionError("Delai depasse")
 
-
 class TestsProtocole(unittest.TestCase):
-    def test_messages_fragmentes_et_regroupes(self):
+    # Vérifie le décodage des messages reçus en plusieurs morceaux ou regroupés.
+    def test_decodage_messages(self):
         decodeur = Decodeur()
         donnees = encoder({"type": "ping"}) + encoder({"type": "ping"})
         self.assertEqual(decodeur.alimenter(donnees[:3]), [])
@@ -59,9 +59,9 @@ class TestsProtocole(unittest.TestCase):
             with self.assertRaises(ValueError):
                 valider({**message, **modifications})
 
-
 class TestsReseau(unittest.TestCase):
-    def test_etats_coupure_reconnexion_sans_doublons(self):
+    # Vérifie la conservation des états et la reconnexion sans doublons.
+    def test_reconnexion_etats(self):
         stockage = StockageMemoire()
         serveur = ServeurCentre(stockage, "127.0.0.1", 0)
         serveur.demarrer()
@@ -91,8 +91,8 @@ class TestsReseau(unittest.TestCase):
         self.addCleanup(troisieme.fermer)
         attendre(lambda: troisieme.instantane()["connected"] and troisieme.instantane()["seen"] == {"01", "02"})
         self.assertEqual(len(stockage.historique), 4)
-
-    def test_client_invalide_ne_coupe_pas_serveur(self):
+    # Vérifie qu'un client invalide n'arrête pas le serveur.
+    def test_client_invalide(self):
         stockage = StockageMemoire()
         serveur = ServeurCentre(stockage, "127.0.0.1", 0)
         serveur.demarrer()

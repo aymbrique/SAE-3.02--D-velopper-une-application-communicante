@@ -7,9 +7,9 @@ import unittest
 from src.modeles.plan import HAUTEUR_SCENE, LARGEUR_SCENE, trajet_voiture
 from src.simulation.moteur import DISTANCE_SECURITE, Simulation
 
-
 class TestsArrivees(unittest.TestCase):
-    def test_trajets_commencent_et_finissent_hors_bords_visibles(self):
+    # Vérifie que les trajets commencent et se terminent hors de la zone visible.
+    def test_bords_trajets(self):
         for limites in ((0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), (-350, -240, 1950, 1340)):
             for origine, virage in product("NSEW", ("straight", "left", "right")):
                 with self.subTest(limites=limites, origine=origine, virage=virage):
@@ -19,8 +19,8 @@ class TestsArrivees(unittest.TestCase):
                         self.assertTrue(x < gauche - 14 or x > droite + 14
                                         or y < haut - 14 or y > bas + 14, (x, y))
                     self.assertGreater(arret, 0)
-
-    def test_arrivees_aux_bords_sans_insertion_dans_file(self):
+    # Vérifie qu'une voiture apparaît au bord sans s'insérer dans une file occupée.
+    def test_arrivee_file(self):
         simulation = Simulation(debit=0)
         simulation.limites_circulation = (-350, -240, 1950, 1340)
         premier = simulation.ajouter_voiture("N", "straight")
@@ -31,8 +31,8 @@ class TestsArrivees(unittest.TestCase):
         self.assertIsNotNone(second)
         self.assertEqual(second.distance, 0)
         self.assertEqual(second.position[:2], second.trajet.points[0])
-
-    def test_moitie_des_arrivees_vient_du_nord(self):
+    # Vérifie qu'environ la moitié des voitures arrive du nord.
+    def test_arrivees_nord(self):
         simulation = Simulation(debit=0)
         nombres = Counter()
         for _ in range(12000):
@@ -41,8 +41,8 @@ class TestsArrivees(unittest.TestCase):
         self.assertTrue(5700 < nombres["N"] < 6300, nombres)
         for origine in ("S", "E", "W"):
             self.assertTrue(1700 < nombres[origine] < 2300, nombres)
-
-    def test_arrivees_nord_avec_choix_rares_ouest_et_est(self):
+    # Vérifie que les voitures du nord tournent ou bifurquent rarement.
+    def test_bifurcations_nord(self):
         simulation = Simulation(debit=0)
         nombres = Counter()
         for _ in range(6000):
@@ -56,8 +56,8 @@ class TestsArrivees(unittest.TestCase):
         # Le choix Ouest au carrefour du bas represente environ 5 % des tout droit.
         self.assertTrue(200 < nombres[("straight", "lower_west")] < 380, nombres)
         self.assertGreater(nombres[("straight", None)], 5000, nombres)
-
-    def test_voitures_route_milieu_tournent_parfois_au_nord(self):
+    # Vérifie que certaines voitures de la route du milieu bifurquent vers le nord.
+    def test_bifurcation_milieu(self):
         simulation = Simulation(debit=0)
         nombres = Counter()
         for _ in range(6000):
@@ -67,8 +67,8 @@ class TestsArrivees(unittest.TestCase):
                 nombres[voiture.trajet.variante] += 1
         self.assertTrue(200 < nombres["middle_north"] < 380, nombres)
         self.assertGreater(nombres[None], 5000, nombres)
-
-    def test_trajets_explicites_previsibles_et_variantes_possibles(self):
+    # Vérifie les trajets choisis explicitement et leurs variantes.
+    def test_variantes_trajets(self):
         simulation = Simulation(debit=0)
         par_defaut = simulation.ajouter_voiture("N", "straight")
         self.assertIsNone(par_defaut.trajet.variante)
