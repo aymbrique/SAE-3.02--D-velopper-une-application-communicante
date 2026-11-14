@@ -4,8 +4,8 @@ from math import atan2, degrees, hypot
 from bisect import bisect_right
 
 
-def bezier(debut, controle1, controle2, fin, etapes=24):
-    """Calculer les points d'un virage arrondi avec la formule de Bezier.
+def virage_arrondi(debut, controle1, controle2, fin, etapes=24):
+    """Calculer les points d'un virage arrondi avec une courbe lisse.
 
     Les deux points de controle fixent la forme du virage. Cette formule
     geometrique evite que la voiture change brutalement de direction.

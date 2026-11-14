@@ -1,7 +1,7 @@
 """Plan commun au dessin et aux trajets : coordonnees du croquis utilisateur."""
 
 from math import hypot
-from src.modeles.trajet import Trajet, bezier
+from src.modeles.trajet import Trajet, virage_arrondi
 
 LARGEUR_SCENE, HAUTEUR_SCENE = 1600, 1100
 CX, CY = 450, 560
@@ -104,7 +104,7 @@ def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
             controle1 = (points[-1][0] + entree_direction[0] * 64,
                         points[-1][1] + entree_direction[1] * 64)
             controle2 = (fin[0] - sortie_direction[0] * 64, fin[1] - sortie_direction[1] * 64)
-            points.extend(bezier(points[-1], controle1, controle2, fin))
+            points.extend(virage_arrondi(points[-1], controle1, controle2, fin))
             indices_virages.append((debut_virage, len(points) - 1))
         if cle == "C":
             axe = "NS" if entree_direction[0] == 0 else "EW"
