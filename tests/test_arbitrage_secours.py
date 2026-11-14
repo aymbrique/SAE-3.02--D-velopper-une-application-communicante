@@ -41,15 +41,15 @@ class TestsArbitrageSecours(unittest.TestCase):
                 break
         else:
             self.fail("Le second secours n'a pas obtenu le passage apres le premier.")
-
-    def test_mission_plus_ancienne_prioritaire_sur_chaque_axe(self):
+    # Vérifie que la mission la plus ancienne passe en premier sur chaque axe.
+    def test_mission_ancienne(self):
         for axe in ("NS", "EW"):
             for identifiant_ancien in ("01", "02"):
                 with self.subTest(axe=axe, ancien=identifiant_ancien):
                     simulation, ancien, recent = self.preparer_secours_opposes(axe, identifiant_ancien)
                     self.terminer_dans_ordre(simulation, ancien, recent)
-
-    def test_deux_demandes_reexaminent_reservation_precoce(self):
+    # Vérifie que deux demandes peuvent changer une priorité réservée trop tôt.
+    def test_reservation_revue(self):
         for axe in ("NS", "EW"):
             for identifiant_ancien in ("01", "02"):
                 with self.subTest(axe=axe, ancien=identifiant_ancien):
@@ -61,8 +61,8 @@ class TestsArbitrageSecours(unittest.TestCase):
                     self.assertFalse(simulation.vehicules_engages)
                     ancien.distance = ancien.passage[0]
                     self.terminer_dans_ordre(simulation, ancien, recent)
-
-    def test_secours_deja_engage_garde_priorite_jusqu_a_sortie(self):
+    # Vérifie qu'un secours déjà engagé garde la priorité jusqu'à sa sortie.
+    def test_secours_engage(self):
         for axe in ("NS", "EW"):
             with self.subTest(axe=axe):
                 simulation, ancien, recent = self.preparer_secours_opposes(axe, "02")
@@ -71,8 +71,8 @@ class TestsArbitrageSecours(unittest.TestCase):
                 self.assertIn(recent.identifiant, simulation.vehicules_engages)
                 ancien.distance = ancien.passage[0]
                 self.terminer_dans_ordre(simulation, recent, ancien)
-
-    def test_retour_libere_feux_avant_caserne(self):
+    # Vérifie que le retour libère les feux après le carrefour, avant la caserne.
+    def test_liberation_feux(self):
         simulation, ancien, recent = self.preparer_secours_opposes("EW", "02")
         simulation.avancer(PAS_TEMPS)
         self.assertEqual(simulation.feux.prioritaire.identifiant, ancien.identifiant)

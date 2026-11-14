@@ -34,8 +34,8 @@ class TestsMariaDB(unittest.TestCase):
                 curseur.execute("DELETE FROM historique_etats")
                 curseur.execute("DELETE FROM vehicules")
             liaison.commit()
-
-    def test_persistance_refus_anciens_etats_et_nouvelle_session(self):
+    # Vérifie la persistance, le refus des anciens états et l'acceptation d'une nouvelle session.
+    def test_persistance_etats(self):
         session = str(uuid4())
         message = {"type": "etat", "id": "01", "etat": "occupe", "numero": 2, "session": session}
         self.assertTrue(self.stockage.enregistrer(message))
@@ -49,8 +49,8 @@ class TestsMariaDB(unittest.TestCase):
                          [("01", "occupe"), ("02", "disponible")])
         self.assertTrue(rouvert.enregistrer({**message, "session": str(uuid4()), "numero": 1, "etat": "disponible"}))
         self.assertEqual(len(rouvert.instantane()["history"]), 3)
-
-    def test_tcp_reel_et_reouverture_base(self):
+    # Vérifie les échanges TCP, la reconnexion et les données après réouverture de la base.
+    def test_tcp_persistance(self):
         serveur = ServeurCentre(self.stockage, "127.0.0.1", 0)
         serveur.demarrer()
         self.addCleanup(serveur.fermer)

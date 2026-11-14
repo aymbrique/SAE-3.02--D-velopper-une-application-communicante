@@ -26,8 +26,8 @@ class TestsCarte(unittest.TestCase):
         vue.scene().render(peintre, QRectF(0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), vue.sceneRect())
         peintre.end()
         return image
-
-    def test_terrains_arretes_au_bord_chaussee(self):
+    # Vérifie que les terrains dessinés s'arrêtent au bord de la chaussée.
+    def test_bords_chaussee(self):
         image = self.dessiner_carte()
         for cote, entree in ENTREES_SITES.items():
             with self.subTest(site=cote):
@@ -36,8 +36,8 @@ class TestsCarte(unittest.TestCase):
                 self.assertEqual(image.pixelColor(x + 20, y - DEMI_LARGEUR_ROUTE - 4), QColor("lightgray"))
         self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE + 4, 200), QColor("gray"))
         self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE - 4, 200), QColor("lightgray"))
-
-    def test_routes_rejoignent_sept_bords_ouverts(self):
+    # Vérifie les sept sorties routières et l'absence de sortie supplémentaire au sud.
+    def test_sorties_carte(self):
         image = self.dessiner_carte()
         for x, y in ((CX + 34, 0), (850 + 34, 0), (0, CY + 34),
                      (LARGEUR_SCENE - 1, CY + 34), (0, 950 + 34),
