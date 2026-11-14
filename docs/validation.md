@@ -6,40 +6,30 @@ Depuis la racine du projet, avec l'environnement Python activé :
 python -m unittest discover -s tests -v
 ```
 
-## Ce qui est vérifié
+## Tests conservés
 
-- Déplacements par pas fixes, rouge/orange, files, espacement et reprise du trafic.
-- Passage des voitures compatibles au vert, y compris derrière un virage.
-- Rangement en avançant, déport limité à 22 unités et braquage inférieur à 25 degrés.
-- Passage et réinsertion près du virage du bas, sans sortie de route ni contact.
-- Virages opposés au raccordement du bas après un rangement, avec les deux types de secours.
-- Dégagement d'une voiture déjà décalée dans ce raccordement avant le virage du secours.
-- Conservation de l'ordre dans la file pendant le rangement et la reprise.
-- Secours plus rapides et passage au vert sans réservation inutile de tout le carrefour.
-- Absence de contact entre les rectangles orientés, vérifiée avec les polygones Qt.
-- Départ dans une file de onze voitures au nord et retour à la caserne.
-- Retour et nouveau départ simultanés à la caserne, avec des voitures en manœuvre.
-- Attente devant un secours immobilisé qui barre réellement l'accès à la caserne.
-- Virage d'un secours après une réinsertion au carrefour, sans attente jusqu'à la sortie complète.
-- Deux secours simultanés et les seize couples de destinations à 40 voitures/minute.
-- Deux secours face à face sur les deux axes : mission la plus ancienne,
-  maintien du choix jusqu'à la sortie, puis passage du second sans attendre
-  le retour complet du premier à la caserne.
-- Aucune réservation du retour avant les soins, pendant le stationnement
-  ou dans l'allée du parking ; reprise de la demande sur la route au seuil.
-- Passage du second secours pendant que le premier intervient à la mairie,
-  sur les deux axes, avec chacun des deux véhicules comme premier intervenant.
-- Dix minutes à 60 voitures/minute, six interventions successives, graines 51 et 302.
-- Retour des missions, progression du trafic et durée limitée du tout rouge dans ces scénarios.
-- Arrivée à un point d'intervention ou en fin de trajet à une erreur flottante près.
-- Annulation des réserves opposées et restitution par quarts aux prochains verts.
-- Boutons, limite de 25 voitures/minute dans l'interface, vitesses, minuteur et échanges TCP réels sur l'ordinateur.
+La suite conserve les fichiers suivants, soit **1 000 lignes** au total,
+commentaires et lignes vides compris.
 
-Les régressions se trouvent dans `tests/test_rangement.py` et
-`tests/test_priorite_fluide.py`.
-L'arbitrage face à face est vérifié dans `tests/test_arbitrage_secours.py`.
-La libération des feux pendant les soins est vérifiée dans `tests/test_priorite_parking.py`.
-Les contrôles géométriques communs sont dans `tests/controles_circulation.py`.
+| Fichier | Lignes | Vérifications principales |
+|---|---:|---|
+| `test_simulation.py` | 334 | Cycle des feux, priorités, compensation et simulation générale |
+| `test_circulation.py` | 234 | Files, espacement, entrée au carrefour et passage des secours |
+| `test_arbitrage_secours.py` | 89 | Ordre de passage de deux secours et maintien de la priorité |
+| `test_arrivees.py` | 80 | Apparition des voitures et choix des trajets |
+| `test_reseau.py` | 108 | Messages TCP, coupures et reconnexion |
+| `test_mariadb.py` | 76 | Persistance des états et échanges TCP avec la base de test |
+| `test_carte.py` | 48 | Rendu de certains éléments de la carte |
+| `controles_circulation.py` | 31 | Vérification commune des distances et des carrosseries |
+| **Total** | **1 000** | |
+
+`controles_circulation.py` fournit une fonction utilisée par plusieurs tests.
+`test_mariadb.py` utilise également une fonction de `test_reseau.py`.
+
+Cette sélection remplace la suite plus étendue. Certains cas particuliers de
+rangement, de circulation secondaire, de retour à la caserne et de commandes
+de l'interface ne disposent plus de leurs fichiers de tests dédiés. Les essais
+manuels restent utiles pour vérifier ces situations.
 
 ## MariaDB
 
