@@ -141,11 +141,10 @@ Sur la VM 2 :
 ```bash
 cd ~/SAE302
 source .venv/bin/activate
-cp -n config.example.ini config.ini
 nano config.ini
 ```
 
-Renseigner :
+Créer ce fichier local et renseigner :
 
 ```ini
 [reseau]

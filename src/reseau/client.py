@@ -15,9 +15,9 @@ class ClientEtats:
         self.port = port
         self.session = str(uuid4())
         self.numeros = {"01": 0, "02": 0}
-        self.en_attente_envoi = deque()  # File : premier message ajoute, premier envoye.
+        self.en_attente_envoi = deque()
         self.derniers_etats = {}
-        self.verrou = Lock()  # Protege les donnees partagees avec la fenetre.
+        self.verrou = Lock()
         self.arret_demande = Event()
         self.thread_reseau = None
         self.connexion = None

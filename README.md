@@ -11,7 +11,6 @@ Dans PyCharm, ouvrir le dossier **SAE302-GitHub** dans `PycharmProjects`.
 Le dossier `SAE302-Facture-Sucree` présent sur ce poste est une autre copie.
 
 Le modèle des voitures et des secours est dans **`src/modeles/vehicules.py`**.
-L'arborescence complète se trouve dans [ARBORESCENCE.txt](ARBORESCENCE.txt).
 
 ## Se repérer
 
@@ -70,6 +69,5 @@ carrosseries orientées, avec une marge de 3 unités : les rectangles ne se touc
 python -m unittest discover -s tests -v
 ```
 
-Les essais MariaDB nécessitent une base de test dédiée. Voir
-[validation](docs/validation.md), [architecture](docs/architecture.md) et
-[utilisation](docs/interface.md).
+Les essais MariaDB nécessitent une base de test dédiée. L’architecture générale
+du projet est décrite dans [architecture](docs/architecture.md).

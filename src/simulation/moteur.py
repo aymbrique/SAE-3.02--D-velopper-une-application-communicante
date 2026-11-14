@@ -10,13 +10,13 @@ from src.simulation.feux import Feux, DemandePriorite
 from src.simulation.priorite import (DECALAGE_RANGEMENT, proche_secours,
                                      carrosseries_separees, coins_carrosserie)
 
-PAS_TEMPS = 0.05  # Duree d'un calcul de deplacement, en secondes simulees.
-DISTANCE_SECURITE = 44.0  # Distance minimale entre les centres des vehicules.
+PAS_TEMPS = 0.05
+DISTANCE_SECURITE = 44.0
 MAX_VOITURES = 25
-DUREE_INTERVENTION = 8.0  # Temps passe sur le lieu de l'intervention.
-VITESSE_SECOURS = 56.0  # Plus rapide que les voitures, y compris dans les virages.
-ANTICIPATION_RACCORDEMENT = 3 * VITESSE_SECOURS  # Anticiper la priorite 3 s avant un raccordement.
-FACTEUR_VITESSE_VIRAGE = 40 / 28  # Degager les virages plus vite que l'allure de croisiere.
+DUREE_INTERVENTION = 8.0
+VITESSE_SECOURS = 56.0
+ANTICIPATION_RACCORDEMENT = 3 * VITESSE_SECOURS
+FACTEUR_VITESSE_VIRAGE = 40 / 28
 
 
 def voiture_rangee(vehicule):
@@ -88,7 +88,6 @@ class Simulation:
         return evenements
 
     def choisir_virage(self):
-        # 95 % tout droit ; les 5 % restants sont repartis entre les virages.
         choix = self.aleatoire.randrange(200)
         if choix < 190:
             return "straight"
@@ -97,7 +96,6 @@ class Simulation:
         return "right"
 
     def choisir_variante(self, origine, virage):
-        # Un trajet sur vingt bifurque au raccordement situe apres le feu.
         if (origine, virage) in (("N", "straight"), ("E", "left"), ("W", "right")):
             return "lower_west" if self.aleatoire.randrange(20) == 0 else None
         if (origine, virage) in (("W", "straight"), ("N", "left"), ("S", "right")):
@@ -107,7 +105,6 @@ class Simulation:
     def ajouter_voiture(self, origine=None, virage=None, *, variante=None):
         if len(self.voitures) >= MAX_VOITURES:
             return None
-        # Une arrivee sur deux vient du Nord ; les trois autres se partagent le reste.
         origine = origine or self.aleatoire.choice(("N", "N", "N", "S", "E", "W"))
         virage_automatique = virage is None
         virage = virage or self.choisir_virage()
@@ -140,8 +137,6 @@ class Simulation:
     def demandes(self):
         resultat = []
         for vehicule in self.secours:
-            # Le second passage est le retour : ne pas le reserver en allant
-            # au patient, pendant les soins ou encore dans l'allee du parking.
             if vehicule.indice_passage == 1 and (
                     not vehicule.intervention_effectuee or vehicule.temps_intervention_restant > 0
                     or not sur_chaussee(*vehicule.position[:2])):
@@ -150,12 +145,7 @@ class Simulation:
             retour_caserne = self._revient_caserne(vehicule)
             au_seuil = distance is not None and (distance <= 150 or delai_arrivee <= 10)
             if retour_caserne or au_seuil or self._quitte_caserne(vehicule):
-                # Demander le vert des l'approche, meme si la sortie est encore
-                # occupee. Le controle d'entree impose toujours sa liberation.
                 if vehicule.passage and vehicule.identifiant not in self.vehicules_engages:
-                    # Deux secours peuvent rejoindre la meme file au retour.
-                    # Le suiveur ne doit pas verrouiller le vert devant celui
-                    # qui le bloque physiquement et doit passer en premier.
                     if any(autre is not vehicule and autre.occupe and autre.passage
                            and autre.passage[2] == vehicule.passage[2]
                            and self._bloque_approche(autre, vehicule, vehicule.passage[0])
@@ -212,7 +202,6 @@ class Simulation:
             if self.temps_depuis_arrivee >= 60 / self.debit:
                 self.temps_depuis_arrivee %= 60 / self.debit
                 self.ajouter_voiture()
-        # Degager le carrefour en premier, puis les vehicules en tete de file.
         ordonnes = sorted(self.vehicules, key=self._ordre_deplacement)
         for vehicule in ordonnes:
             self._deplacer(vehicule)
@@ -225,8 +214,6 @@ class Simulation:
         self.voitures = voitures_restantes
 
     def _ordre_deplacement(self, vehicule):
-        # Degager d'abord les sorties aussi : un leader deja sorti doit avancer
-        # avant la voiture qui le suit encore dans le carrefour, sans micro-arret.
         degage = (vehicule.identifiant in self.vehicules_engages
                     or (vehicule.type_vehicule == "car" and vehicule.passage is None))
         return (not degage, -vehicule.distance, vehicule.identifiant)
@@ -235,7 +222,6 @@ class Simulation:
         return vehicule.position_a(distance, decalage)
 
     def _mouvements_opposes_caserne(self, premier, second):
-        """Un retour et un depart utilisent deux voies distinctes dans l'allee."""
         if (premier.type_vehicule == "car" or second.type_vehicule == "car"
                 or not premier.occupe or not second.occupe or premier.intervention_effectuee == second.intervention_effectuee):
             return False
@@ -253,8 +239,7 @@ class Simulation:
             return carrosseries_separees(premier, position, second, position_autre)
         if abs(premier.decalage_lateral) > 1e-6 or abs(second.decalage_lateral) > 1e-6:
             return carrosseries_separees(premier, position, second, position_autre)
-        # Apres une reinsertion, un ecart deja court ne doit pas emprisonner
-        # le vehicule de tete : il peut s'eloigner en gardant les gabarits libres.
+
         precedent = hypot(premier.position[0] - second.position[0],
                          premier.position[1] - second.position[1])
         s_eloigne = distance > precedent + 1e-7
@@ -289,7 +274,6 @@ class Simulation:
             _, _, apres = voiture.trajet.position_a(distance)
             if cos(radians(avant - apres)) < .995:
                 return False
-        # Ne jamais se garer au milieu d'un raccordement.
         return not any(arret < fin and voiture.distance < arrivee
                        for arret, arrivee, _ in voiture.trajet.raccordements)
 
@@ -352,7 +336,6 @@ class Simulation:
                             and -45 < avance_relative < 180 and ecart_lateral < DECALAGE_RANGEMENT - .5):
                         cible = -DECALAGE_RANGEMENT
                         break
-            # Garder aussi la place de reintegrer sa voie avant le prochain virage.
             if cible and any(arret - 4 * secours.longueur_manoeuvre <= secours.distance < fin
                               for arret, fin, _ in (*secours.trajet.raccordements, *secours.passages)):
                 cible = 0.0
@@ -420,7 +403,6 @@ class Simulation:
             if vehicule.type_vehicule != "car" and not (autre.debut_manoeuvre is not None
                                                and autre.decalage_cible == 0):
                 continue
-            # La voie habituelle reste reservee au leader pendant sa manoeuvre.
             ox, oy, orientation_autre = autre.trajet.position_a(autre.distance)
             if cos(radians(orientation - orientation_autre)) < .96:
                 continue
@@ -494,21 +476,13 @@ class Simulation:
         if vehicule.type_vehicule != "car" and self.feux.prioritaire and self.feux.prioritaire.identifiant != vehicule.identifiant:
             return False
         if vehicule.type_vehicule != "car":
-            # Un obstacle lointain ou dans une autre branche ne ferme pas l'entree.
-            # Chaque pas reste soumis au controle de collision des carrosseries.
             return self._trajet_libre(vehicule, vehicule.distance + min(.05, vehicule.vitesse * PAS_TEMPS))
-        # Une voiture deja engagee et en mouvement ne bouche pas tout le trajet
-        # des suivantes tout droit. Cela vaut aussi lorsqu'elle vient de sortir.
-        # Les vehicules arretes, les virages et les secours restent des obstacles.
         suivants = self._vehicules_sortis(vehicule, fin)
         for autre in self.vehicules:
             if (autre is not vehicule and self.passages_compatibles(vehicule, autre)
                     and autre.vitesse > 0 and not autre.en_attente
                     and autre.distance > autre.passages[0][0]):
                 suivants.add(autre.identifiant)
-        # Ce controle global reserve toujours une sortie non bouchee. Le controle
-        # de chaque deplacement dans _deplacer ne saute aucun vehicule : DISTANCE_SECURITE reste
-        # obligatoire, meme avec plusieurs voitures engagees sur la meme voie.
         for decalage in range(0, int(fin - arret) + 46, 6):
             if not self._trajet_libre(vehicule, arret + decalage, suivants):
                 return False
@@ -647,8 +621,6 @@ class Simulation:
         priorite = self._priorite_raccordement(cle)
         if priorite and priorite[0] is not vehicule:
             secours, arret_secours = priorite
-            # Une voiture sur la voie devant le secours doit d'abord degager,
-            # sinon le secours resterait bloque derriere sa propre priorite.
             if not self._bloque_approche(vehicule, secours, arret_secours):
                 return False
         suivants = set()
@@ -673,14 +645,11 @@ class Simulation:
                     if self._conflit_raccordement_restant(
                             vehicule, arret, fin, cle, autre, arret_autre, fin_autre):
                         return False
-        # Le garage ne reserve que son allee : l'insertion est controlee a F.
-        # Sinon une file deja en train de degager F immobilise encore le secours
-        # sur sa place, alors que son trajet jusqu'a la ligne d'insertion est libre.
+
         fin_balaye, marge = fin, (1 if vehicule.type_vehicule != "car" else 46)
         if cle == "parking" and arret == 0:
             fin_balaye = next(debut for debut, _, nom in vehicule.trajet.raccordements if nom == "F")
             marge = 1
-        # Controler aussi la sortie avant d'engager le vehicule.
         for decalage in range(0, int(fin_balaye - arret) + marge, 6):
             if not self._trajet_libre(vehicule, arret + decalage, suivants):
                 return False
@@ -691,9 +660,7 @@ class Simulation:
         mouvement_premier = vehicule.trajet.mouvements_raccordements.get((arret, cle))
         mouvement_autre = autre.trajet.mouvements_raccordements.get((arret_autre, cle))
         if mouvement_premier is None or mouvement_autre is None:
-            return True  # Les aires et le stationnement restent exclusifs.
-        # Inclure la fin du balayage : au retour F, les deux places divergent
-        # juste apres le raccordement, meme si leur mouvement est identique.
+            return True
         def etat_manoeuvre(element, debut):
             return ((element.debut_manoeuvre - debut, element.decalage_initial,
                      element.decalage_cible, element.longueur_manoeuvre)
@@ -705,9 +672,6 @@ class Simulation:
                      vehicule.trajet.position_a(fin + 46)[:2],
                      etat_manoeuvre(vehicule, arret), etat_manoeuvre(autre, arret_autre))
         if cle_cache not in self.conflits_raccordements:
-            # Les memes mouvements au meme raccordement ont la meme geometrie.
-            # Calculer une seule fois ou l'autre vehicule finit de nous couper
-            # la route ; ajouter une marge pour l'echantillonnage de 3 unites.
             chemin = [vehicule.position_a(arret + decalage)
                     for decalage in range(0, int(fin - arret) + 47, 3)]
             dernier_conflit = -inf
@@ -758,8 +722,6 @@ class Simulation:
                     if (en_retour is sortie_direction or not self._revient_caserne(en_retour)
                             or en_retour.distance > arret_retour):
                         continue
-                    # Un depart deja dans l'allee peut barrer la fin du retour.
-                    # Le laisser sortir evite que chacun attende l'autre a F.
                     fin_parking = en_retour.trajet.longueur
                     if any(not carrosseries_separees(en_retour, en_retour.position_a(distance),
                                             sortie_direction, sortie_direction.position)
