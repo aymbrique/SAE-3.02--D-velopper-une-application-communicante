@@ -5,69 +5,40 @@ Projet d’Aymeri et Selim.
 Simulation 2D d'un carrefour, de voitures et de deux véhicules de secours.
 Le centre reçoit les états des secours par TCP et les conserve dans MariaDB.
 
-## Ouvrir le bon projet
+## Prendre connaissance du projet
 
-Dans PyCharm, ouvrir le dossier **SAE302-GitHub** dans `PycharmProjects`.
-Le dossier `SAE302-Facture-Sucree` présent sur ce poste est une autre copie.
+Pour comprendre l’architecture du projet, l’organisation des fichiers et le rôle
+des différentes parties du programme, consultez le fichier
+[architecture.md](docs/architecture.md), situé dans le dossier `docs`.
 
-Le modèle des voitures et des secours est dans **`src/modeles/vehicules.py`**.
+## Déploiement du projet
 
-## Se repérer
+Si vous disposez de vos deux machines virtuelles et souhaitez déployer le projet,
+suivez le document [deploiement-projet.md](docs/deploiement-projet.md), situé dans
+le dossier `docs`. Il présente la configuration réseau, l’installation des logiciels,
+la préparation de MariaDB et le lancement de la simulation et du centre de suivi.
 
-| Fichier ou dossier | Rôle |
-|---|---|
-| `main.py` | Démarre la simulation. |
-| `centre.py` | Démarre le centre TCP et son suivi. |
-| `init_db.py` | Prépare les tables de la base. |
-| `src/modeles/vehicules.py` | État, position, vitesse et rangement des véhicules. |
-| `src/modeles/plan.py` | Routes, destinations et trajets. |
-| `src/modeles/trajet.py` | Position et orientation le long d'un trajet. |
-| `src/simulation/moteur.py` | Déplacements, files et interventions. |
-| `src/simulation/priorite.py` | Rangement et gabarits des véhicules. |
-| `src/simulation/feux.py` | Feux et secondes de compensation. |
-| `src/interface/` | Carte et fenêtres. |
-| `src/reseau/` | Client, serveur et messages TCP. |
-| `src/stockage/` et `sql/` | Accès MariaDB et tables. |
-| `tests/` | Vérifications automatiques. |
+## Lancer la simulation sur PyCharm
 
-## Lancer la simulation seule
-
-Dans le terminal du projet :
+Dans PyCharm, ouvrez le terminal du projet avec l’environnement Python `.venv`
+activé, puis exécutez :
 
 ```bash
-source .venv/bin/activate
 python main.py --local
 ```
 
-Cliquer sur **Démarrer**, choisir le secours et sa destination, puis sur
-**Envoyer en intervention**. Le débit et la vitesse se règlent en haut.
+Cette commande lance la simulation seule, sans connexion au centre de suivi.
 
-Pour installer le projet sur Debian et utiliser le centre avec MariaDB :
-[guide de déploiement](docs/deploiement-projet.md).
-
-## Circulation
-
-- Les voitures apparaissent aux bords du plan, avec davantage d'arrivées au nord.
-- Au feu principal : 95 % tout droit, 2,5 % à gauche et 2,5 % à droite.
-  Des bifurcations rares existent aussi sur les routes du bas et du milieu.
-- À l'approche d'un secours, les voitures rejoignent une place libre sur le bord
-  droit de leur voie, s'arrêtent, puis se réinsèrent après son passage.
-  Une voiture engagée dans un carrefour ou un virage finit de le dégager.
-- Au vert, une file peut suivre une voiture qui tourne. Les suivantes ralentissent
-  pendant la manœuvre. Les trajectoires qui se croisent passent successivement.
-- Le départ et le retour à la caserne demandent le vert vertical pour vider la file.
-- Les réserves de temps des deux axes s'annulent entre elles. Un quart du solde
-  restant prolonge chaque prochain vert normal de l'axe concerné.
-
-Les véhicules gardent 44 unités entre leurs centres en circulation normale.
-Lors d'un passage à côté d'une voiture rangée, le contrôle porte sur les
-carrosseries orientées, avec une marge de 3 unités : les rectangles ne se touchent pas.
+Cliquez sur **Démarrer**, choisissez le véhicule de secours et sa destination,
+puis cliquez sur **Envoyer en intervention**. Le débit et la vitesse se règlent
+en haut de la fenêtre.
 
 ## Vérifier le projet
+
+Dans le terminal du projet, avec l’environnement Python activé :
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Les essais MariaDB nécessitent une base de test dédiée. L’architecture générale
-du projet est décrite dans [architecture](docs/architecture.md).
+Les essais MariaDB nécessitent une base de test dédiée.
