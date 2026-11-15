@@ -1,7 +1,7 @@
-# SAE302 — Circulation et secours
+# SAE302 — Facture sucrée
 
-Groupe : Facture-Sucree
-Étudiants :** Aymeri BARBIER et Selim PARLAK
+**Groupe :** Facture sucrée
+**Étudiants :** Aymeri Barbier et Selim Parlak
 
 Ce projet simule la circulation autour d'un carrefour. Des voitures suivent des
 trajets, respectent les feux et laissent passer deux véhicules de secours. La
