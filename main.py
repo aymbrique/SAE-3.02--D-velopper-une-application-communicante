@@ -11,6 +11,7 @@ from src.reseau.client import ClientEtats
 
 
 def main():
+    """Lit les options de lancement, puis ouvre la simulation et son client TCP."""
     analyseur = argparse.ArgumentParser(description="Simulation de trafic - connexion TCP locale")
     analyseur.add_argument("--config", dest="configuration", help="Fichier INI local")
     analyseur.add_argument("--host", dest="hote", help="Adresse IP du centre")

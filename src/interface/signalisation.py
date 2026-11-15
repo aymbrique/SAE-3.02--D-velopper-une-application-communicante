@@ -8,7 +8,7 @@ from src.modeles.plan import NOEUDS, DEMI_LARGEUR_ROUTE, DISTANCE_ARRET
 
 
 def dessiner_barriere(scene, x, y, largeur):
-    """Une barriere blanche et rouge avec deux pieds."""
+    """Dessine une barrière rouge et blanche à la position donnée."""
     for dx in (6, largeur - 10):
         rectangle(scene, x + dx, y + 8, 4, 16, "#50565a")
     rectangle(scene, x, y, largeur, 10, "white")
@@ -17,6 +17,7 @@ def dessiner_barriere(scene, x, y, largeur):
 
 
 def dessiner_panneau_travaux(scene, x, y):
+    """Dessine un panneau de travaux avec une silhouette et une pelle."""
     rectangle(scene, x - 2, y + 14, 4, 24, "#747c80")
     triangle = QPolygonF([QPointF(x, y - 21), QPointF(x - 23, y + 17),
                          QPointF(x + 23, y + 17)])
@@ -33,7 +34,7 @@ def dessiner_panneau_travaux(scene, x, y):
 
 
 def dessiner_travaux(scene):
-    """Habiller la voie descendante R-Q sans changer la circulation."""
+    """Ajoute le décor de travaux le long de la voie descendante R-Q."""
     x = NOEUDS["R"][0] - DEMI_LARGEUR_ROUTE
     haut = NOEUDS["R"][1] + DEMI_LARGEUR_ROUTE
     bas = NOEUDS["Q"][1] - DEMI_LARGEUR_ROUTE
@@ -45,6 +46,7 @@ def dessiner_travaux(scene):
 
 
 def dessiner_cedez_passage(scene, x, y):
+    """Dessine un panneau cédez-le-passage à la position donnée."""
     rectangle(scene, x - 2, y + 12, 4, 16, "#747c80")
     triangle = QPolygonF([QPointF(x - 18, y - 14), QPointF(x + 18, y - 14),
                          QPointF(x, y + 14)])
@@ -53,7 +55,7 @@ def dessiner_cedez_passage(scene, x, y):
 
 
 def dessiner_panneaux_priorite(scene):
-    """Trois panneaux avant les raccordements sans feux B, D et U."""
+    """Dessine les panneaux et les marquages avant les raccordements B, D et U."""
     # Arrivees du nord vers la route du milieu et celle du bas.
     for cle in ("B", "D"):
         x, y = NOEUDS[cle]

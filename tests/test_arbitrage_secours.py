@@ -7,7 +7,10 @@ from controles_circulation import verifier_espacement
 
 
 class TestsArbitrageSecours(unittest.TestCase):
+    """Tests de l'ordre de passage des deux secours au carrefour."""
+
     def preparer_secours_opposes(self, axe, identifiant_ancien):
+        """Place deux secours face à face et renvoie la simulation et les deux véhicules."""
         simulation = Simulation(debit=0)
         identifiant_recent = "02" if identifiant_ancien == "01" else "01"
         simulation.demarrer_mission(identifiant_ancien, "S" if axe == "NS" else "W")
@@ -25,6 +28,7 @@ class TestsArbitrageSecours(unittest.TestCase):
         return simulation, ancien, recent
 
     def terminer_dans_ordre(self, simulation, premier, second):
+        """Vérifie que le premier secours dégage avant de laisser entrer le second."""
         fin_premier = premier.passage[1]
         arret_second = second.passage[0]
         premier_degage = False
@@ -41,15 +45,17 @@ class TestsArbitrageSecours(unittest.TestCase):
                 break
         else:
             self.fail("Le second secours n'a pas obtenu le passage apres le premier.")
-    # Vérifie que la mission la plus ancienne passe en premier sur chaque axe.
+
     def test_mission_ancienne(self):
+        """Vérifie que la mission la plus ancienne passe en premier sur chaque axe."""
         for axe in ("NS", "EW"):
             for identifiant_ancien in ("01", "02"):
                 with self.subTest(axe=axe, ancien=identifiant_ancien):
                     simulation, ancien, recent = self.preparer_secours_opposes(axe, identifiant_ancien)
                     self.terminer_dans_ordre(simulation, ancien, recent)
-    # Vérifie que deux demandes peuvent changer une priorité réservée trop tôt.
+
     def test_reservation_revue(self):
+        """Vérifie que deux demandes peuvent changer une priorité réservée trop tôt."""
         for axe in ("NS", "EW"):
             for identifiant_ancien in ("01", "02"):
                 with self.subTest(axe=axe, ancien=identifiant_ancien):
@@ -61,8 +67,9 @@ class TestsArbitrageSecours(unittest.TestCase):
                     self.assertFalse(simulation.vehicules_engages)
                     ancien.distance = ancien.passage[0]
                     self.terminer_dans_ordre(simulation, ancien, recent)
-    # Vérifie qu'un secours déjà engagé garde la priorité jusqu'à sa sortie.
+
     def test_secours_engage(self):
+        """Vérifie qu'un secours déjà engagé garde la priorité jusqu'à sa sortie."""
         for axe in ("NS", "EW"):
             with self.subTest(axe=axe):
                 simulation, ancien, recent = self.preparer_secours_opposes(axe, "02")
@@ -71,8 +78,9 @@ class TestsArbitrageSecours(unittest.TestCase):
                 self.assertIn(recent.identifiant, simulation.vehicules_engages)
                 ancien.distance = ancien.passage[0]
                 self.terminer_dans_ordre(simulation, recent, ancien)
-    # Vérifie que le retour libère les feux après le carrefour, avant la caserne.
+
     def test_liberation_feux(self):
+        """Vérifie que le retour libère les feux après le carrefour, avant la caserne."""
         simulation, ancien, recent = self.preparer_secours_opposes("EW", "02")
         simulation.avancer(PAS_TEMPS)
         self.assertEqual(simulation.feux.prioritaire.identifiant, ancien.identifiant)

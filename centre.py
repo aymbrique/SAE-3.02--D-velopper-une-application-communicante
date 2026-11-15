@@ -1,4 +1,4 @@
-"""Centre TCP et MariaDB - meme VM que la simulation. Lancer apres init_db.py."""
+"""Centre de suivi TCP et stockage MariaDB. Lancer après init_db.py."""
 
 import argparse
 import sys
@@ -11,6 +11,7 @@ from src.stockage.mariadb import StockageMariaDB
 
 
 def main():
+    """Lance le centre TCP avec ou sans fenêtre et renvoie son code de sortie."""
     analyseur = argparse.ArgumentParser(description=__doc__)
     analyseur.add_argument("--config", dest="configuration")
     analyseur.add_argument("--bind", dest="adresse_ecoute", default="127.0.0.1", help="Adresse locale d'ecoute TCP")

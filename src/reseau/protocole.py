@@ -7,16 +7,31 @@ TAILLE_LIGNE_MAX = 4096
 
 
 def encoder(message):
+    """Convertit un message en octets JSON UTF-8 terminés par un saut de ligne."""
     texte = json.dumps(message, ensure_ascii=True, separators=(",", ":"))
     texte += "\n"  # Fin d'un message.
     return texte.encode("utf-8")
 
 
 class Decodeur:
+    """Tampon qui reconstitue les messages JSON reçus par morceaux sur TCP."""
+
     def __init__(self):
+        """Crée un tampon de réception vide."""
         self.tampon = b""
 
     def alimenter(self, donnees):
+        """Ajoute les octets reçus et extrait les messages complets.
+
+        Args:
+            donnees: Nouveaux octets reçus par la socket.
+
+        Returns:
+            La liste des objets JSON complets ; les octets restants sont conservés.
+
+        Raises:
+            ValueError: Si un message est trop long, invalide ou différent d'un objet JSON.
+        """
         # TCP peut livrer un message en plusieurs morceaux : garder le debut.
         self.tampon += donnees
         messages = []
@@ -37,6 +52,7 @@ class Decodeur:
 
 
 def valider(message):
+    """Vérifie les champs d'un message et le renvoie, ou lève ValueError."""
     if message.get("type") == "ping":
         return message
     if message.get("type") != "etat":

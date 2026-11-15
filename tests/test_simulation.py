@@ -10,12 +10,16 @@ from src.simulation.feux import Feux, DemandePriorite
 
 
 def avancer_feux(feux, duree, demandes=(), occupe=False, libre=True):
+    """Fait avancer les feux par pas de 0,05 seconde avec les demandes données."""
     for _ in range(round(duree / 0.05)):
         feux.avancer(0.05, demandes, occupe, libre)
 
 class TestsFeux(unittest.TestCase):
-    # Vérifie le cycle des feux et le maintien du tout rouge si le carrefour est occupé.
+    """Tests du cycle des feux, des priorités et de la compensation du retard."""
+
+
     def test_cycle_feux(self):
+        """Vérifie le cycle des feux et le maintien du tout rouge si le carrefour est occupé."""
         feux = Feux()
         avancer_feux(feux, 8)
         self.assertEqual(feux.signal("NS"), "amber")
@@ -25,8 +29,9 @@ class TestsFeux(unittest.TestCase):
         self.assertEqual(feux.phase, "all_red")
         avancer_feux(feux, .05)
         self.assertEqual(feux.signal("EW"), "green")
-    # Vérifie le choix du secours prioritaire et le maintien de sa priorité.
+
     def test_arbitrage_feux(self):
+        """Vérifie le choix du secours prioritaire et le maintien de sa priorité."""
         feux = Feux()
         premier = DemandePriorite("02", "EW", 1, 5)
         second = DemandePriorite("01", "NS", 2, 4)
@@ -43,8 +48,9 @@ class TestsFeux(unittest.TestCase):
         feux = Feux()
         avancer_feux(feux, .05, [DemandePriorite("02", "NS", 0, 4), DemandePriorite("01", "NS", 0, 4)], True)
         self.assertEqual(feux.prioritaire.identifiant, "01")
-    # Vérifie la transition vers l'axe prioritaire après dégagement du carrefour.
+
     def test_priorite_opposee(self):
+        """Vérifie la transition vers l'axe prioritaire après dégagement du carrefour."""
         feux = Feux()
         avancer_feux(feux, 1)
         demande = [DemandePriorite("01", "EW", 0, 0)]
@@ -56,8 +62,9 @@ class TestsFeux(unittest.TestCase):
         self.assertEqual(feux.phase, "all_red")
         avancer_feux(feux, .05, demande, True)
         self.assertEqual(feux.signal("EW"), "green")
-    # Vérifie que la demande du secours change d'axe pour son retour.
+
     def test_axe_retour(self):
+        """Vérifie que la demande du secours change d'axe pour son retour."""
         feux = Feux()
         avancer_feux(feux, 1, [DemandePriorite("01", "NS", 0, 0)], True)
         avancer_feux(feux, .05, [DemandePriorite("01", "EW", 0, 1)], True)
@@ -65,8 +72,9 @@ class TestsFeux(unittest.TestCase):
         self.assertEqual(feux.phase, "amber")
         avancer_feux(feux, 2, [DemandePriorite("01", "EW", 0, 1)], True)
         self.assertEqual(feux.signal("EW"), "green")
-    # Vérifie l'accumulation du retard et sa restitution par quarts.
+
     def test_compensation_quart(self):
+        """Vérifie l'accumulation du retard et sa restitution par quarts."""
         feux = Feux()
         avancer_feux(feux, 10, [DemandePriorite("01", "NS", 0, 0)], True)
         avancer_feux(feux, 10, [DemandePriorite("02", "NS", 1, 1)], True)
@@ -89,8 +97,9 @@ class TestsFeux(unittest.TestCase):
         avancer_feux(feux, 10.25)
         self.assertAlmostEqual(feux.reserve_temps["EW"], 6.75)
         self.assertEqual(feux.phase, "amber")
-    # Vérifie le retard de chaque axe sans compter deux fois les mêmes secondes.
+
     def test_accumulation_axes(self):
+        """Vérifie le retard de chaque axe sans compter deux fois les mêmes secondes."""
         for axe, axe_oppose in (("NS", "EW"), ("EW", "NS")):
             with self.subTest(axe=axe):
                 feux = Feux()
@@ -108,8 +117,9 @@ class TestsFeux(unittest.TestCase):
                 avancer_feux(feux, 1, occupe=True)
                 self.assertAlmostEqual(feux.reserve_temps[axe_oppose], 13)
                 self.assertEqual(feux.reserve_temps[axe], 0)
-    # Vérifie qu'une mission éloignée ne retarde pas la compensation.
+
     def test_mission_lointaine(self):
+        """Vérifie qu'une mission éloignée ne retarde pas la compensation."""
         feux = Feux()
         avancer_feux(feux, 12, [DemandePriorite("01", "NS", 0, 0)], True)
         avancer_feux(feux, 2.05, occupe=True)
@@ -118,8 +128,9 @@ class TestsFeux(unittest.TestCase):
         avancer_feux(feux, 9, occupe=True)
         self.assertAlmostEqual(feux.reserve_temps["EW"], 3)
         self.assertEqual(feux.phase, "amber")
-    # Vérifie que les réserves opposées se soustraient avant le calcul du bonus.
+
     def test_reserves_opposees(self):
+        """Vérifie que les réserves opposées se soustraient avant le calcul du bonus."""
         feux = Feux()
         feux.reserve_temps.update(NS=17, EW=15)
         avancer_feux(feux, .05)
@@ -132,15 +143,17 @@ class TestsFeux(unittest.TestCase):
         self.assertAlmostEqual(feux.bonus_compensation, .5)
         avancer_feux(feux, 8.5)
         self.assertAlmostEqual(feux.reserve_temps["NS"], 1.5)
-    # Vérifie que deux réserves égales s'annulent.
+
     def test_reserves_egales(self):
+        """Vérifie que deux réserves égales s'annulent."""
         feux = Feux()
         feux.reserve_temps.update(NS=15, EW=15)
         avancer_feux(feux, 30)
         self.assertEqual(feux.reserve_temps, {"NS": 0, "EW": 0})
         self.assertFalse(feux.en_compensation)
-    # Vérifie qu'une priorité interrompt le bonus sans perdre le temps encore dû.
+
     def test_bonus_interrompu(self):
+        """Vérifie qu'une priorité interrompt le bonus sans perdre le temps encore dû."""
         feux = Feux()
         feux.reserve_temps["EW"] = 8
         avancer_feux(feux, 10)
@@ -159,8 +172,9 @@ class TestsFeux(unittest.TestCase):
         self.assertEqual(feux.axe, "EW")
         self.assertTrue(feux.en_compensation)
         self.assertAlmostEqual(feux.bonus_compensation, 1.75)
-    # Vérifie qu'une priorité sur le même axe ne recompte pas le bonus déjà rendu.
+
     def test_bonus_decompte(self):
+        """Vérifie qu'une priorité sur le même axe ne recompte pas le bonus déjà rendu."""
         feux = Feux()
         feux.reserve_temps["EW"] = 8
         avancer_feux(feux, 10)
@@ -172,8 +186,9 @@ class TestsFeux(unittest.TestCase):
         # La seconde de bonus deja servie ne doit pas etre recomptee.
         self.assertAlmostEqual(feux.reserve_temps["EW"], 6)
         self.assertEqual(feux.reserve_temps["NS"], 0)
-    # Vérifie qu'une petite réserve est entièrement restituée.
+
     def test_petite_reserve(self):
+        """Vérifie qu'une petite réserve est entièrement restituée."""
         feux = Feux()
         feux.reserve_temps["EW"] = .12
         for _ in range(1200):
@@ -184,8 +199,9 @@ class TestsFeux(unittest.TestCase):
         avancer_feux(feux, 20)
         self.assertFalse(feux.en_compensation)
         self.assertEqual(feux.bonus_compensation, 0)
-    # Vérifie que le bonus ne dépasse pas le temps prévu.
+
     def test_budget_bonus(self):
+        """Vérifie que le bonus ne dépasse pas le temps prévu."""
         feux = Feux()
         feux.reserve_temps["EW"] = 1.01
         avancer_feux(feux, 10)
@@ -193,8 +209,9 @@ class TestsFeux(unittest.TestCase):
         avancer_feux(feux, 8.3)
         self.assertEqual(feux.phase, "amber")
         self.assertAlmostEqual(feux.reserve_temps["EW"], .7575)
-    # Vérifie qu'une priorité avant le bonus conserve la réserve non utilisée.
+
     def test_reserve_conservee(self):
+        """Vérifie qu'une priorité avant le bonus conserve la réserve non utilisée."""
         feux = Feux()
         feux.reserve_temps["EW"] = 8
         avancer_feux(feux, 10)
@@ -209,8 +226,9 @@ class TestsFeux(unittest.TestCase):
         self.assertAlmostEqual(feux.bonus_compensation, 2)
         avancer_feux(feux, 10)
         self.assertAlmostEqual(feux.reserve_temps["EW"], 6)
-    # Vérifie qu'une courte priorité ne restitue pas la réserve pendant le tout rouge.
+
     def test_compensation_rouge(self):
+        """Vérifie qu'une courte priorité ne restitue pas la réserve pendant le tout rouge."""
         feux = Feux()
         feux.reserve_temps["EW"] = 4
         demande = [DemandePriorite("01", "NS", 0, 0)]
@@ -226,8 +244,9 @@ class TestsFeux(unittest.TestCase):
         self.assertAlmostEqual(feux.bonus_compensation, 1)
         avancer_feux(feux, 9)
         self.assertAlmostEqual(feux.reserve_temps["EW"], 3)
-    # Vérifie qu'une nouvelle réserve réduit d'abord le solde de l'autre axe.
+
     def test_nouvelle_reserve(self):
+        """Vérifie qu'une nouvelle réserve réduit d'abord le solde de l'autre axe."""
         feux = Feux()
         feux.reserve_temps["NS"] = 2
         demande = [DemandePriorite("01", "NS", 0, 0)]
@@ -237,8 +256,9 @@ class TestsFeux(unittest.TestCase):
         avancer_feux(feux, 2, demande, True)
         self.assertAlmostEqual(feux.reserve_temps["NS"], 0)
         self.assertAlmostEqual(feux.reserve_temps["EW"], 1)
-    # Vérifie qu'une courte priorité ne crée pas de réserve.
+
     def test_priorite_courte(self):
+        """Vérifie qu'une courte priorité ne crée pas de réserve."""
         feux = Feux()
         avancer_feux(feux, 5, [DemandePriorite("01", "NS", 0, 0)], True)
         avancer_feux(feux, 2.05)
@@ -246,8 +266,11 @@ class TestsFeux(unittest.TestCase):
         self.assertFalse(feux.en_compensation)
 
 class TestsSimulation(unittest.TestCase):
-    # Vérifie la distance, le délai d'arrivée et les seuils de demande de priorité.
+    """Tests de la circulation et des missions sur plusieurs pas de simulation."""
+
+
     def test_seuil_priorite(self):
+        """Vérifie la distance, le délai d'arrivée et les seuils de demande de priorité."""
         simulation = Simulation(debit=0)
         simulation.demarrer_mission("01")
         vehicule = simulation.secours[0]
@@ -266,8 +289,9 @@ class TestsSimulation(unittest.TestCase):
         self.assertEqual(len(simulation.demandes()), 1)
         vehicule.vitesse = 0
         self.assertEqual(simulation.approche(vehicule)[1], inf)
-    # Vérifie l'arrêt au rouge, la reprise au vert et la fin du trajet.
+
     def test_arret_feu(self):
+        """Vérifie l'arrêt au rouge, la reprise au vert et la fin du trajet."""
         simulation = Simulation(debit=0)
         voiture = simulation.ajouter_voiture("E", "straight")
         voiture.distance = voiture.passage[0] - 2
@@ -278,8 +302,9 @@ class TestsSimulation(unittest.TestCase):
         self.assertGreater(voiture.distance, voiture.passage[0])
         simulation.avancer(30)
         self.assertEqual(simulation.trajets_termines, 1)
-    # Vérifie l'espacement de cinq voitures et l'attente du second secours.
+
     def test_file_secours(self):
+        """Vérifie l'espacement de cinq voitures et l'attente du second secours."""
         simulation = Simulation(debit=0)
         simulation.feux.axe = "EW"
         voitures = []
@@ -302,8 +327,9 @@ class TestsSimulation(unittest.TestCase):
         simulation.avancer(.1)
         self.assertEqual(simulation.feux.prioritaire.identifiant, "01")
         self.assertEqual(second.distance, second.passages[1][0])
-    # Vérifie dix minutes de circulation sans contact et la fin des deux missions.
+
     def test_simulation_longue(self):
+        """Vérifie dix minutes de circulation sans contact et la fin des deux missions."""
         for graine, debit in ((302, 12), (51, 40)):
             with self.subTest(graine=graine, debit=debit):
                 simulation = Simulation(debit=debit, graine=graine)
@@ -323,8 +349,9 @@ class TestsSimulation(unittest.TestCase):
                 self.assertTrue(all(not v.occupe for v in simulation.secours))
                 self.assertIn(("01", "disponible"), simulation.evenements)
                 self.assertIn(("02", "disponible"), simulation.evenements)
-    # Vérifie que le résultat ne dépend pas de la fréquence de rafraîchissement.
+
     def test_pas_fixe(self):
+        """Vérifie que le résultat ne dépend pas de la fréquence de rafraîchissement."""
         premier, second = Simulation(), Simulation()
         premier.avancer(10)
         for _ in range(1000):

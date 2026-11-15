@@ -8,6 +8,7 @@ MARGE_DEPASSEMENT = 40.0
 
 
 def coins_carrosserie(vehicule, position, marge_supplementaire=0.0):
+    """Renvoie les quatre coins orientés du véhicule avec la marge demandée."""
     x, y, angle = position
     longueur, largeur = (28, 15) if vehicule.type_vehicule == "car" else (36, 18)
     avant_vehicule = (cos(radians(angle)), sin(radians(angle)))
@@ -20,9 +21,10 @@ def coins_carrosserie(vehicule, position, marge_supplementaire=0.0):
 
 
 def carrosseries_separees(premier, position, second, position_autre):
-    """Rectangles orientes, avec 3 unites libres entre les carrosseries."""
+    """Vérifie que les rectangles des véhicules gardent une marge totale de 3 unités."""
     a = coins_carrosserie(premier, position, 1.5)
     b = coins_carrosserie(second, position_autre, 1.5)
+    # Une projection séparée suffit à prouver que les rectangles ne se touchent pas.
     for angle in (position[2], position[2] + 90,
                   position_autre[2], position_autre[2] + 90):
         dx, dy = cos(radians(angle)), sin(radians(angle))
@@ -34,7 +36,7 @@ def carrosseries_separees(premier, position, second, position_autre):
 
 
 def proche_secours(voiture, secours):
-    """Meme route ou voie opposee, devant un secours proche ou juste depasse."""
+    """Indique si une voiture doit céder le passage à un secours proche."""
     if not secours.occupe or secours.temps_intervention_restant > 0:
         return False
     x, y, angle = voiture.trajet.position_a(voiture.distance)

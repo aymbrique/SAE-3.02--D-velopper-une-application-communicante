@@ -13,11 +13,15 @@ from src.modeles.plan import CX, CY, NOEUDS, DEMI_LARGEUR_ROUTE, HAUTEUR_SCENE, 
 
 
 class TestsCarte(unittest.TestCase):
+    """Tests du dessin des routes et des abords de la chaussée."""
+
     @classmethod
     def setUpClass(cls):
+        """Prépare l'application Qt commune aux tests de dessin."""
         cls.application = QApplication.instance() or QApplication([])
 
     def dessiner_carte(self):
+        """Dessine la carte dans une image et renvoie cette image."""
         vue = VueCarte()
         self.addCleanup(vue.close)
         image = QImage(LARGEUR_SCENE, HAUTEUR_SCENE, QImage.Format.Format_RGB32)
@@ -26,8 +30,9 @@ class TestsCarte(unittest.TestCase):
         vue.scene().render(peintre, QRectF(0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), vue.sceneRect())
         peintre.end()
         return image
-    # Vérifie que les terrains dessinés s'arrêtent au bord de la chaussée.
+
     def test_bords_chaussee(self):
+        """Vérifie que les terrains dessinés s'arrêtent au bord de la chaussée."""
         image = self.dessiner_carte()
         for cote, entree in ENTREES_SITES.items():
             with self.subTest(site=cote):
@@ -36,8 +41,9 @@ class TestsCarte(unittest.TestCase):
                 self.assertEqual(image.pixelColor(x + 20, y - DEMI_LARGEUR_ROUTE - 4), QColor("lightgray"))
         self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE + 4, 200), QColor("gray"))
         self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE - 4, 200), QColor("lightgray"))
-    # Vérifie les sept sorties routières et l'absence de sortie supplémentaire au sud.
+
     def test_sorties_carte(self):
+        """Vérifie les sept sorties routières et l'absence de sortie supplémentaire au sud."""
         image = self.dessiner_carte()
         for x, y in ((CX + 34, 0), (850 + 34, 0), (0, CY + 34),
                      (LARGEUR_SCENE - 1, CY + 34), (0, 950 + 34),

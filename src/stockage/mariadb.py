@@ -9,13 +9,18 @@ from src.configuration import RACINE
 
 
 class StockageMariaDB:
+    """Accès aux états des secours et à leur historique dans MariaDB."""
+
     def __init__(self, configuration):
+        """Conserve une copie des paramètres de connexion à la base."""
         self.configuration = dict(configuration)
 
     def ouvrir_connexion(self):
+        """Ouvre et renvoie une connexion dont les résultats sont des dictionnaires."""
         return pymysql.connect(**self.configuration, cursorclass=DictCursor)
 
     def initialiser(self):
+        """Exécute les fichiers SQL du projet pour créer les tables manquantes."""
         with self.ouvrir_connexion() as liaison:
             with liaison.cursor() as curseur:
                 for chemin in sorted((RACINE / "sql").glob("*.sql")):
@@ -23,6 +28,17 @@ class StockageMariaDB:
             liaison.commit()
 
     def enregistrer(self, message):
+        """Enregistre un état et son historique dans une même transaction.
+
+        Args:
+            message: État validé contenant l'identifiant, la session et le numéro.
+
+        Returns:
+            True si l'état est enregistré, False si la mise à jour est ancienne ou déjà reçue.
+
+        Raises:
+            pymysql.MySQLError: Si une requête ou la connexion à MariaDB échoue.
+        """
         # Une transaction regroupe l'historique et l'etat courant.
         # commit valide ; rollback annule une mise a jour refusee.
         valeurs = (message["id"], message["etat"], message["session"], message["numero"])
@@ -34,6 +50,7 @@ class StockageMariaDB:
                 curseur.execute("SELECT MAX(numero) AS dernier FROM historique_etats "
                                "WHERE session_id=%s AND identifiant=%s", (message["session"], message["id"]))
                 maximum = curseur.fetchone()["dernier"]
+                # Ignorer les anciens numéros pour ne pas dupliquer l'historique.
                 if maximum is not None and message["numero"] <= maximum:
                     liaison.rollback()
                     return False
@@ -53,6 +70,7 @@ class StockageMariaDB:
         return True
 
     def instantane(self):
+        """Renvoie les états courants et les 100 dernières mises à jour."""
         with self.ouvrir_connexion() as liaison:
             with liaison.cursor() as curseur:
                 curseur.execute("SELECT * FROM vehicules ORDER BY identifiant")

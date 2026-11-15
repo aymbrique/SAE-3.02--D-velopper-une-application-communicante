@@ -12,12 +12,16 @@ from src.reseau.serveur import ServeurCentre
 
 
 class StockageMemoire:
+    """Stockage de test en mémoire pour vérifier TCP sans serveur MariaDB."""
+
     def __init__(self):
+        """Prépare le verrou, les derniers états et l'historique en mémoire."""
         self.lignes = {}
         self.historique = []
         self.verrou = Lock()
 
     def enregistrer(self, message):
+        """Garde un état en mémoire et refuse les numéros déjà reçus pour sa session."""
         with self.verrou:
             if any(r["session_id"] == message["session"] and r["identifiant"] == message["id"]
                    and r["numero"] >= message["numero"] for r in self.historique):
@@ -29,11 +33,13 @@ class StockageMemoire:
             return True
 
     def instantane(self):
+        """Renvoie une copie des états et de l'historique sous verrou."""
         with self.verrou:
             return {"vehicles": list(self.lignes.values()), "history": list(reversed(self.historique[-100:]))}
 
 
 def attendre(condition, delai_max=8):
+    """Attend une condition jusqu'au délai maximal, puis lève AssertionError."""
     echeance = time.monotonic() + delai_max
     while time.monotonic() < echeance:
         if condition():
@@ -42,14 +48,18 @@ def attendre(condition, delai_max=8):
     raise AssertionError("Delai depasse")
 
 class TestsProtocole(unittest.TestCase):
-    # Vérifie le décodage des messages reçus en plusieurs morceaux ou regroupés.
+    """Tests du format JSON et de la reconstitution des messages TCP."""
+
+
     def test_decodage_messages(self):
+        """Vérifie le décodage des messages reçus en plusieurs morceaux ou regroupés."""
         decodeur = Decodeur()
         donnees = encoder({"type": "ping"}) + encoder({"type": "ping"})
         self.assertEqual(decodeur.alimenter(donnees[:3]), [])
         self.assertEqual(decodeur.alimenter(donnees[3:]), [{"type": "ping"}, {"type": "ping"}])
 
     def test_messages_invalides(self):
+        """Vérifie le refus des messages mal formés et des champs invalides."""
         for donnees in (b'[]\n', b'not json\n', b'x' * 4097):
             with self.assertRaises(ValueError):
                 Decodeur().alimenter(donnees)
@@ -60,8 +70,11 @@ class TestsProtocole(unittest.TestCase):
                 valider({**message, **modifications})
 
 class TestsReseau(unittest.TestCase):
-    # Vérifie la conservation des états et la reconnexion sans doublons.
+    """Tests de connexion, d'envoi des états et de reconnexion au centre."""
+
+
     def test_reconnexion_etats(self):
+        """Vérifie la conservation des états et la reconnexion sans doublons."""
         stockage = StockageMemoire()
         serveur = ServeurCentre(stockage, "127.0.0.1", 0)
         serveur.demarrer()
@@ -91,8 +104,9 @@ class TestsReseau(unittest.TestCase):
         self.addCleanup(troisieme.fermer)
         attendre(lambda: troisieme.instantane()["connected"] and troisieme.instantane()["seen"] == {"01", "02"})
         self.assertEqual(len(stockage.historique), 4)
-    # Vérifie qu'un client invalide n'arrête pas le serveur.
+
     def test_client_invalide(self):
+        """Vérifie qu'un client invalide n'arrête pas le serveur."""
         stockage = StockageMemoire()
         serveur = ServeurCentre(stockage, "127.0.0.1", 0)
         serveur.demarrer()

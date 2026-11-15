@@ -9,7 +9,10 @@ from src.reseau.protocole import Decodeur, encoder, valider
 
 
 class ServeurCentre:
+    """Serveur TCP recevant les états des deux secours d'une seule simulation."""
+
     def __init__(self, stockage, hote="0.0.0.0", port=5000):
+        """Prépare le stockage, la socket d'écoute et les données partagées."""
         self.stockage = stockage
         self.hote = hote
         self.port = port
@@ -23,17 +26,20 @@ class ServeurCentre:
         self.donnees = {"vehicles": [], "history": []}
 
     def instantane(self):
+        """Renvoie les dernières données et le statut de liaison sous verrou."""
         with self.verrou:
             return {"vehicles": self.donnees["vehicles"], "history": self.donnees["history"],
                     "connected": self.connecte, "status": self.statut,
                     "seen": set(self.recus)}
 
     def _modifier_statut(self, texte, connecte=False):
+        """Met à jour le texte du statut et l'indicateur de connexion sous verrou."""
         with self.verrou:
             self.statut = texte
             self.connecte = connecte
 
     def demarrer(self):
+        """Charge les états, ouvre la socket d'écoute et lance le thread réseau."""
         self.donnees = self.stockage.instantane()
         self.ecouteur = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -48,11 +54,13 @@ class ServeurCentre:
         self.thread_reseau.start()
 
     def fermer(self):
+        """Demande l'arrêt et attend la fin du thread jusqu'à 8 secondes."""
         self.arret_demande.set()
         if self.thread_reseau:
             self.thread_reseau.join(timeout=8)
 
     def _executer(self):
+        """Reçoit les messages et confirme les états après leur stockage dans MariaDB."""
         client_actif = None
         session = None
         decodeur = Decodeur()

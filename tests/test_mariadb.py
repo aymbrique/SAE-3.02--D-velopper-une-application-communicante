@@ -12,8 +12,11 @@ from test_reseau import attendre
 
 @unittest.skipUnless(os.environ.get("SAE_TEST_DB_NAME"), "Configurer une base MariaDB de test dediee")
 class TestsMariaDB(unittest.TestCase):
+    """Tests de stockage dans une base dédiée dont le nom se termine par _test."""
+
     @classmethod
     def setUpClass(cls):
+        """Vérifie la base dédiée, prépare sa connexion et crée ses tables."""
         nom = os.environ["SAE_TEST_DB_NAME"]
         if not nom.endswith("_test"):
             raise ValueError("Les tests effacent leurs tables : utiliser une base terminee par _test")
@@ -29,13 +32,15 @@ class TestsMariaDB(unittest.TestCase):
         cls.stockage.initialiser()
 
     def setUp(self):
+        """Vide les deux tables de la base de test avant chaque essai."""
         with self.stockage.ouvrir_connexion() as liaison:
             with liaison.cursor() as curseur:
                 curseur.execute("DELETE FROM historique_etats")
                 curseur.execute("DELETE FROM vehicules")
             liaison.commit()
-    # Vérifie la persistance, le refus des anciens états et l'acceptation d'une nouvelle session.
+
     def test_persistance_etats(self):
+        """Vérifie la persistance, le refus des anciens états et l'acceptation d'une nouvelle session."""
         session = str(uuid4())
         message = {"type": "etat", "id": "01", "etat": "occupe", "numero": 2, "session": session}
         self.assertTrue(self.stockage.enregistrer(message))
@@ -49,8 +54,9 @@ class TestsMariaDB(unittest.TestCase):
                          [("01", "occupe"), ("02", "disponible")])
         self.assertTrue(rouvert.enregistrer({**message, "session": str(uuid4()), "numero": 1, "etat": "disponible"}))
         self.assertEqual(len(rouvert.instantane()["history"]), 3)
-    # Vérifie les échanges TCP, la reconnexion et les données après réouverture de la base.
+
     def test_tcp_persistance(self):
+        """Vérifie les échanges TCP, la reconnexion et les données après réouverture de la base."""
         serveur = ServeurCentre(self.stockage, "127.0.0.1", 0)
         serveur.demarrer()
         self.addCleanup(serveur.fermer)

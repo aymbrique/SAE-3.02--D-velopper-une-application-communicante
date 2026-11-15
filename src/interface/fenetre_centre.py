@@ -8,7 +8,10 @@ from PyQt6.QtWidgets import (
 
 
 class FenetreCentre(QMainWindow):
+    """Fenêtre affichant les états reçus et leur historique MariaDB."""
+
     def __init__(self, serveur):
+        """Crée les tableaux et le minuteur de mise à jour du centre."""
         super().__init__()
         self.serveur = serveur
         self.setWindowTitle("SAE302 - Centre de coordination")
@@ -36,6 +39,7 @@ class FenetreCentre(QMainWindow):
 
     @staticmethod
     def _creer_tableau(entetes):
+        """Crée et renvoie un tableau non modifiable avec les en-têtes donnés."""
         table = QTableWidget(0, len(entetes))
         table.setHorizontalHeaderLabels(entetes)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -48,6 +52,7 @@ class FenetreCentre(QMainWindow):
 
     @staticmethod
     def _remplir_ligne(table, ligne, valeurs):
+        """Écrit les valeurs dans une ligne du tableau en formatant les dates."""
         for colonne, valeur in enumerate(valeurs):
             affichage = valeur.strftime("%Y-%m-%d %H:%M:%S") if hasattr(valeur, "strftime") else str(valeur)
             element = QTableWidgetItem(affichage)
@@ -55,6 +60,7 @@ class FenetreCentre(QMainWindow):
             table.setItem(ligne, colonne, element)
 
     def actualiser(self):
+        """Affiche les derniers états et l'historique fournis par le serveur."""
         instantane = self.serveur.instantane()
         self.etiquette_connexion.setText(f"Ecoute sur {self.serveur.hote}:{self.serveur.port} - {instantane['status']}")
         lignes = {ligne["identifiant"]: ligne for ligne in instantane["vehicles"]}
@@ -74,6 +80,7 @@ class FenetreCentre(QMainWindow):
                                                 ligne["numero"], ligne["session_id"]))
 
     def closeEvent(self, evenement):
+        """Arrête le serveur lorsque la fenêtre se ferme."""
         self.minuteur.stop()
         self.serveur.fermer()
         super().closeEvent(evenement)

@@ -8,6 +8,8 @@ from src.modeles.trajet import Trajet
 
 @dataclass
 class Vehicule:
+    """Données et position d'une voiture ou d'un véhicule de secours."""
+
     identifiant: str
     type_vehicule: str
     trajet: Trajet
@@ -37,11 +39,20 @@ class Vehicule:
 
     @property
     def passage(self):
+        """Renvoie le prochain passage au carrefour, ou None s'ils sont tous franchis."""
         if self.indice_passage < len(self.passages):
             return self.passages[self.indice_passage]
         return None
 
     def decalage_lateral_a(self, distance):
+        """Calcule le décalage et le braquage pendant une manœuvre.
+
+        Args:
+            distance: Distance parcourue sur le trajet.
+
+        Returns:
+            Le décalage latéral en unités du plan et le braquage en degrés.
+        """
         if self.debut_manoeuvre is None:
             return self.decalage_lateral, 0.0
         progression = min(1.0, max(0.0,
@@ -53,6 +64,7 @@ class Vehicule:
         return decalage, degrees(atan(pente))
 
     def position_a(self, distance, decalage=None):
+        """Renvoie (x, y, angle) en tenant compte du rangement et du braquage."""
         x, y, orientation = self.trajet.position_a(distance)
         braquage = 0.0
         if decalage is None:
@@ -63,11 +75,14 @@ class Vehicule:
 
     @property
     def position(self):
+        """Renvoie la position et l'orientation actuelles du véhicule."""
         return self.position_a(self.distance)
 
 
 @dataclass(frozen=True)
 class EtatVehicule:
+    """Copie non modifiable des informations d'un véhicule destinées à l'affichage."""
+
     identifiant: str
     type_vehicule: str
     couleur: str
@@ -83,6 +98,8 @@ class EtatVehicule:
 
 @dataclass(frozen=True)
 class EtatSimulation:
+    """Copie non modifiable des véhicules, des feux et des compteurs à afficher."""
+
     vehicules: tuple[EtatVehicule, ...]
     nord_sud: str
     est_ouest: str
@@ -92,6 +109,7 @@ class EtatSimulation:
 
     @property
     def voitures(self):
+        """Renvoie uniquement les états des voitures ordinaires."""
         voitures = []
         for vehicule in self.vehicules:
             if vehicule.type_vehicule == "car":
@@ -100,6 +118,7 @@ class EtatSimulation:
 
     @property
     def secours(self):
+        """Renvoie uniquement les états des véhicules de secours."""
         secours = []
         for vehicule in self.vehicules:
             if vehicule.type_vehicule != "car":

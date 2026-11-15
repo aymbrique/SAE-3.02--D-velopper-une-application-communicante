@@ -13,7 +13,10 @@ from src.simulation.moteur import Simulation
 
 
 class FenetreSimulation(QMainWindow):
+    """Fenêtre de commande et d'affichage de la simulation."""
+
     def __init__(self, client=None):
+        """Prépare la simulation, les commandes et le minuteur de rafraîchissement."""
         super().__init__()
         self.setWindowTitle("SAE302 - Simulation")
         self.resize(1100, 720)
@@ -34,6 +37,7 @@ class FenetreSimulation(QMainWindow):
         self.actualiser()
 
     def _construire_interface(self):
+        """Assemble les commandes, la carte et les onglets d'information."""
         page = QWidget()
         self.setCentralWidget(page)
         disposition = QVBoxLayout(page)
@@ -55,6 +59,7 @@ class FenetreSimulation(QMainWindow):
         disposition.addWidget(self.pied_fenetre)
 
     def _construire_commandes(self, disposition):
+        """Ajoute les boutons et les choix de trafic, de vitesse et de mission."""
         ligne = QHBoxLayout()
         self.bouton_demarrer = QPushButton("Demarrer")
         self.bouton_demarrer.clicked.connect(self.basculer_pause)
@@ -100,6 +105,7 @@ class FenetreSimulation(QMainWindow):
         disposition.addLayout(missions)
 
     def _construire_onglet_trafic(self):
+        """Crée et renvoie l'onglet des voitures, des feux et des réserves de temps."""
         page = QWidget()
         formulaire = QFormLayout(page)
         self.nombre_voitures = QLabel()
@@ -129,6 +135,7 @@ class FenetreSimulation(QMainWindow):
         return page
 
     def _construire_onglet_secours(self):
+        """Crée et renvoie l'onglet de suivi des deux véhicules de secours."""
         page = QWidget()
         disposition = QVBoxLayout(page)
         self.widgets_secours = {}
@@ -151,6 +158,7 @@ class FenetreSimulation(QMainWindow):
         return page
 
     def _construire_onglet_reseau(self):
+        """Crée et renvoie l'onglet indiquant l'état de la liaison TCP."""
         page = QWidget()
         disposition = QVBoxLayout(page)
         self.etiquette_reseau = QLabel()
@@ -160,9 +168,11 @@ class FenetreSimulation(QMainWindow):
         return page
 
     def _envoyer_selection(self):
+        """Démarre une mission avec le véhicule et la destination sélectionnés."""
         self.demarrer_mission(self.choix_secours.currentData(), self.choix_destination.currentData())
 
     def _actualiser_bouton_envoi(self):
+        """Adapte le bouton d'envoi à la disponibilité du secours sélectionné."""
         secours = self.scenario.obtenir_secours(self.choix_secours.currentData())
         self.bouton_envoi.setEnabled(not secours.occupe)
         self.choix_destination.setEnabled(not secours.occupe)
@@ -173,21 +183,26 @@ class FenetreSimulation(QMainWindow):
             self.bouton_envoi.setText("Envoyer en intervention")
 
     def _changer_vitesse(self):
+        """Applique la vitesse sélectionnée dans la liste."""
         self.regler_vitesse(self.choix_vitesse.currentData())
 
     def regler_vitesse(self, valeur):
+        """Change le facteur de vitesse et relance la mesure du temps."""
         self.vitesse = valeur
         self.horloge.restart()
 
     def _changer_debit(self, valeur):
+        """Applique le nombre de voitures à créer par minute simulée."""
         self.scenario.debit = valeur
 
     def basculer_pause(self):
+        """Démarre, suspend ou reprend la simulation selon son état."""
         self.en_cours = not self.en_cours
         self.horloge.restart()
         self.actualiser()
 
     def recommencer(self):
+        """Réinitialise la simulation et publie la disponibilité des secours."""
         self.scenario = Simulation(debit=self.choix_debit.value())
         if self.client:
             self.client.publier("01", "disponible")
@@ -198,6 +213,7 @@ class FenetreSimulation(QMainWindow):
         self.actualiser()
 
     def _actualiser_simulation(self):
+        """Fait avancer la simulation, publie les événements et rafraîchit la fenêtre."""
         # Temps reel depuis le dernier appel, limite en cas de fenetre bloquee.
         dt = min(self.horloge.restart() / 1000, 0.1)
         if self.en_cours:
@@ -208,16 +224,19 @@ class FenetreSimulation(QMainWindow):
         self.actualiser()
 
     def demarrer_mission(self, identifiant, destination="S"):
+        """Lance la mission demandée, transmet les événements et actualise l'affichage."""
         self.scenario.demarrer_mission(identifiant, destination)
         self._publier_evenements()
         self.actualiser()
 
     def _publier_evenements(self):
+        """Ajoute les changements d'état des secours à la file d'envoi du client."""
         for identifiant, etat in self.scenario.recuperer_evenements():
             if self.client:
                 self.client.publier(identifiant, etat)
 
     def actualiser(self):
+        """Met à jour la carte, les compteurs, les boutons et les informations réseau."""
         etat_simulation = self.scenario.etat_simulation()
         self.vue.actualiser(etat_simulation)
         secondes = int(self.temps_ecoule)
@@ -259,6 +278,7 @@ class FenetreSimulation(QMainWindow):
             self.etiquette_reseau.setText("Mode local : centre non connecte")
 
     def _actualiser_secours(self, secours):
+        """Affiche l'état, la progression et les temps estimés d'un secours."""
         statut, etape, progression = self.widgets_secours[secours.identifiant]
         if secours.occupe:
             statut.setText("Occupe")
@@ -285,6 +305,7 @@ class FenetreSimulation(QMainWindow):
         self.etiquettes_estimations[secours.identifiant].setText(texte)
 
     def closeEvent(self, evenement):
+        """Arrête le minuteur et le client réseau à la fermeture de la fenêtre."""
         self.minuteur.stop()
         if self.client:
             self.client.fermer()

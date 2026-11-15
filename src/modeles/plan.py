@@ -1,4 +1,4 @@
-"""Plan commun au dessin et aux trajets : coordonnees du croquis utilisateur."""
+"""Plan de la ville et coordonnées utilisées pour le dessin et les trajets."""
 
 from math import hypot
 from src.modeles.trajet import Trajet, virage_arrondi
@@ -42,20 +42,34 @@ for cote in DESTINATIONS:
 
 
 def direction(debut, fin):
+    """Renvoie le vecteur de longueur 1 allant du point début au point fin."""
     dx, dy = fin[0] - debut[0], fin[1] - debut[1]
     longueur = hypot(dx, dy)
     return dx / longueur, dy / longueur
 
 
 def point_sur_voie(centre, orientation, avance):
-    """Decaler un point sur la voie de droite et avancer de forward unites."""
+    """Place un point sur la voie de droite, à la distance avance du centre."""
     dx, dy = orientation
     return (centre[0] + avance * dx - DECALAGE_VOIE * dy,
             centre[1] + avance * dy + DECALAGE_VOIE * dx)
 
 
 def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
-    """Relier les routes, arrondir les virages et noter les zones a reserver."""
+    """Construit un trajet à partir des nœuds du plan.
+
+    Args:
+        nom: Nom du trajet.
+        noeuds: Noms des points du plan à relier dans l'ordre.
+        parking_y: Ordonnée de la place à la caserne, ou None pour une voiture.
+        limites_circulation: Limites visibles à dépasser aux entrées et sorties.
+
+    Returns:
+        Un Trajet avec ses virages, ses passages et ses raccordements.
+
+    Raises:
+        ValueError: Si le parcours emprunte un sens ou un virage interdit.
+    """
     noeuds = tuple(noeuds)
     for premier, second in zip(noeuds, noeuds[1:]):
         if (premier, second) == ("Q", "R"):
@@ -128,6 +142,7 @@ def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
         indices_raccordements.append((0, indice_sortie_caserne, MARGE_DEGAGEMENT, "parking"))
         indices_raccordements.append((indice_retour_caserne, len(points) - 1, 0, "parking"))
 
+    # Convertir les indices des points en distances utilisables par la simulation.
     trajet = Trajet(nom, points)
     trajet.noeuds = tuple(noeuds)
     trajet.zones_virage = [(trajet.distances[debut], trajet.distances[fin])
@@ -148,7 +163,7 @@ def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
 
 
 def point_hors_carte(point, orientation, limites, entre=False):
-    """Prolonger la voie jusqu'a l'exterieur du plan ET des marges visibles."""
+    """Renvoie un point au-delà du bord visible pour une entrée ou une sortie."""
     gauche, haut, droite, bas = limites
     x, y = point
     dx, dy = orientation
@@ -166,7 +181,17 @@ def point_hors_carte(point, orientation, limites, entre=False):
 
 
 def trajet_voiture(origine, virage, limites_circulation=(0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), *, variante=None):
-    """Choisir le virage a C et, en option, une bifurcation plus loin sur le plan."""
+    """Prépare le parcours d'une voiture selon son origine et son virage.
+
+    Args:
+        origine: Côté d'arrivée, parmi N, S, E et W.
+        virage: Mouvement au feu : straight, left ou right.
+        limites_circulation: Limites visibles utilisées pour les extrémités du trajet.
+        variante: Bifurcation après le feu, ou None pour le parcours habituel.
+
+    Returns:
+        Le trajet et la distance de sa ligne d'arrêt au carrefour principal.
+    """
     approches = {
         "N": ["north", "F", "C"], "W": ["west", "W", "C"],
         "E": ["upper_east", "H", "U", "B", "C"],
@@ -207,6 +232,16 @@ def trajet_voiture(origine, virage, limites_circulation=(0, 0, LARGEUR_SCENE, HA
 
 
 def trajet_secours(identifiant, parking_y, destination="S"):
+    """Construit l'aller-retour d'un secours entre la caserne et sa destination.
+
+    Args:
+        identifiant: Identifiant du secours.
+        parking_y: Ordonnée de sa place à la caserne.
+        destination: Point d'intervention, parmi N, S, E et W.
+
+    Returns:
+        Le trajet, les passages au carrefour et la distance de l'arrêt sur place.
+    """
     if destination not in DESTINATIONS:
         raise ValueError("Point d'intervention inconnu")
     chemins = {
@@ -222,11 +257,12 @@ def trajet_secours(identifiant, parking_y, destination="S"):
 
 
 def sortie_voiture(trajet):
+    """Renvoie la distance de sortie du carrefour principal sur ce trajet."""
     return trajet.passages[0][1]
 
 
 def sur_chaussee(x, y):
-    """Chaussée dessinee, y compris les extremites ouvertes et la voie R-Q."""
+    """Indique si le point x, y se trouve sur la chaussée du plan."""
     for premier, second in TRONCONS_ROUTES:
         ax, ay = NOEUDS[premier]
         bx, by = NOEUDS[second]

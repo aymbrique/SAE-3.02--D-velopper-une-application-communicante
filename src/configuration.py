@@ -8,6 +8,17 @@ RACINE = Path(__file__).resolve().parents[1]
 
 
 def lire_configuration(chemin=None):
+    """Lit le fichier INI du projet.
+
+    Args:
+        chemin: Fichier à lire, ou None pour utiliser config.ini à la racine.
+
+    Returns:
+        Les réglages lus, ou une configuration vide si le fichier par défaut manque.
+
+    Raises:
+        ValueError: Si le fichier demandé manque ou si son format est invalide.
+    """
     analyseur = ConfigParser(interpolation=None)
     candidat = Path(chemin) if chemin else RACINE / "config.ini"
     if chemin and not candidat.is_file():
@@ -20,6 +31,7 @@ def lire_configuration(chemin=None):
 
 
 def configuration_reseau(analyseur):
+    """Renvoie l'adresse du centre et son port TCP après vérification du port."""
     port = analyseur.getint("reseau", "port", fallback=5000)
     if not 1 <= port <= 65535:
         raise ValueError("Le port TCP doit etre compris entre 1 et 65535")
@@ -27,6 +39,7 @@ def configuration_reseau(analyseur):
 
 
 def configuration_base(analyseur):
+    """Prépare les paramètres MariaDB en donnant priorité à SAE_DB_PASSWORD."""
     mot_de_passe = os.environ.get("SAE_DB_PASSWORD", analyseur.get("mariadb", "password", fallback=""))
     if not mot_de_passe:
         raise ValueError("Renseigner le mot de passe MariaDB dans config.ini ou SAE_DB_PASSWORD")

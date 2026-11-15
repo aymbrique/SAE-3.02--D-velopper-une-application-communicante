@@ -7,16 +7,19 @@ from src.modeles.plan import POINTS_INTERVENTION, NOEUDS, DEMI_LARGEUR_ROUTE, EN
 
 
 def rectangle(scene, x, y, largeur, hauteur, couleur):
+    """Ajoute un rectangle coloré à la scène et renvoie l'élément créé."""
     return scene.addRect(x, y, largeur, hauteur, QPen(Qt.PenStyle.NoPen),
                          QBrush(QColor(couleur)))
 
 
 def polygone(scene, points, couleur):
+    """Dessine un polygone à partir des points donnés et renvoie l'élément créé."""
     return scene.addPolygon(QPolygonF([QPointF(x, y) for x, y in points]),
                             QPen(Qt.PenStyle.NoPen), QBrush(QColor(couleur)))
 
 
 def etiquette(scene, valeur, x, y, largeur, taille=13, couleur="#26343b"):
+    """Place un texte centré dans la largeur donnée et renvoie l'élément créé."""
     police = QFont()
     police.setPixelSize(taille)
     police.setBold(True)
@@ -27,6 +30,7 @@ def etiquette(scene, valeur, x, y, largeur, taille=13, couleur="#26343b"):
 
 
 def dessiner_mairie(scene, x, y):
+    """Dessine la mairie à la position x, y."""
     rectangle(scene, x, y, 150, 100, "#eee2c9")
     polygone(scene, [(x, y), (x + 75, y - 30), (x + 150, y)], "#946752")
     etiquette(scene, "MAIRIE", x, y + 9, 150, 15)
@@ -42,6 +46,7 @@ def dessiner_mairie(scene, x, y):
 
 
 def dessiner_restaurant(scene, x, y):
+    """Dessine le restaurant à la position x, y."""
     rectangle(scene, x, y, 150, 100, "#f0d5b3")
     polygone(scene, [(x, y), (x + 16, y - 22),
                     (x + 134, y - 22), (x + 150, y)], "#b66045")
@@ -55,6 +60,7 @@ def dessiner_restaurant(scene, x, y):
 
 
 def dessiner_supermarche(scene, x, y):
+    """Dessine le supermarché à la position x, y."""
     rectangle(scene, x, y, 220, 108, "#eee9de")
     rectangle(scene, x, y, 220, 10, "#566a7c")
     rectangle(scene, x + 12, y + 18, 196, 30, "#245c9e")
@@ -68,6 +74,7 @@ def dessiner_supermarche(scene, x, y):
 
 
 def dessiner_iut(scene, x, y):
+    """Dessine l'IUT à la position x, y."""
     rectangle(scene, x, y, 220, 108, "#e3e2d8")
     rectangle(scene, x, y, 220, 8, "#456477")
     rectangle(scene, x + 12, y + 16, 196, 28, "#397a87")
@@ -80,7 +87,7 @@ def dessiner_iut(scene, x, y):
 
 
 def dessiner_sites_intervention(scene):
-    """Garder l'acces des secours libre entre chaque parking et la route."""
+    """Dessine les bâtiments et les parkings en laissant les accès libres."""
     batiments = {"W": dessiner_mairie, "S": dessiner_restaurant,
                  "E": dessiner_supermarche, "N": dessiner_iut}
     numeros = {"W": 1, "S": 2, "N": 3, "E": 4}

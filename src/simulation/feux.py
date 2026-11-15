@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DemandePriorite:
+    """Demande d'un secours avec son axe, sa mission et son passage au carrefour."""
+
     identifiant: str
     axe: str
     debut_mission: float
@@ -14,6 +16,8 @@ class DemandePriorite:
 
 
 class Feux:
+    """Gestion du cycle des feux, de la priorité et des réserves de temps."""
+
     DUREE_VERT = 8.0
     DUREE_ORANGE = 1.0
     DUREE_TOUT_ROUGE = 1.0
@@ -21,6 +25,7 @@ class Feux:
     COMPENSATION_MINIMALE = 0.05
 
     def __init__(self):
+        """Démarre le cycle au vert nord-sud avec des réserves de temps vides."""
         self.axe = "NS"
         self.phase = "green"
         self.temps_ecoule = 0.0
@@ -34,21 +39,25 @@ class Feux:
 
     @property
     def axe_oppose(self):
+        """Renvoie l'autre axe de circulation."""
         return "EW" if self.axe == "NS" else "NS"
 
     def signal(self, axe):
+        """Renvoie la couleur du feu pour l'axe demandé."""
         if axe == self.axe and self.phase != "all_red":
             return self.phase
         return "red"
 
     @property
     def temps_restant(self):
+        """Renvoie la durée restante de la phase, bonus compris, en secondes."""
         duree = {"green": self.DUREE_VERT + self.bonus_compensation,
                     "amber": self.DUREE_ORANGE, "all_red": self.DUREE_TOUT_ROUGE}[self.phase]
         return max(0.0, duree - self.temps_ecoule)
 
     @property
     def description(self):
+        """Renvoie le texte de la phase actuelle destiné à l'interface."""
         axe = "Nord-Sud" if self.axe == "NS" else "Est-Ouest"
         if self.phase == "all_red":
             return "Transition : tout rouge"
@@ -61,9 +70,11 @@ class Feux:
         return f"Cycle normal - {axe}"
 
     def _ordre_priorite(self, demande):
+        """Classe les demandes par ancienneté de mission, de demande puis par identifiant."""
         return (demande.debut_mission, demande.date_demande, demande.identifiant)
 
     def _choisir_prioritaire(self, demandes):
+        """Choisit une demande en conservant une priorité déjà verrouillée."""
         passages = [demande for demande in demandes if demande.passage is not None]
         actuel = None
         if self.prioritaire:
@@ -80,6 +91,7 @@ class Feux:
         self.priorite_verrouillee = bool(engage or len(passages) > 1)
 
     def _compenser_reserves(self):
+        """Soustrait le temps commun des réserves opposées et annule les petits restes."""
         commun = min(self.reserve_temps.values())
         for axe in self.reserve_temps:
             self.reserve_temps[axe] = max(0.0, self.reserve_temps[axe] - commun)
@@ -87,6 +99,14 @@ class Feux:
                 self.reserve_temps[axe] = 0.0
 
     def avancer(self, dt, demandes=(), occupe=False, libre=True):
+        """Met à jour les feux et les réserves de temps pour un pas de simulation.
+
+        Args:
+            dt: Durée du pas en secondes simulées.
+            demandes: Demandes de priorité actuelles des secours.
+            occupe: Indicateur de mission conservé dans l'appel, sans effet ici.
+            libre: True si le carrefour est vide et autorise la fin du tout rouge.
+        """
         self._compenser_reserves()
         precedent = self.prioritaire
         self._choisir_prioritaire(demandes)
@@ -94,6 +114,7 @@ class Feux:
             self.en_compensation = False
             self.bonus_compensation = 0.0
 
+        # Le vert prioritaire accumule du retard ; le bonus le restitue ensuite.
         if self.phase == "green":
             maintient_priorite = self.prioritaire is not None and self.prioritaire.axe == self.axe
             if maintient_priorite:
@@ -126,6 +147,7 @@ class Feux:
                 self.temps_ecoule = 0.0
         else:
             self.temps_ecoule += dt
+            # Attendre un carrefour vide avant de donner le vert au nouvel axe.
             if self.temps_ecoule >= self.DUREE_TOUT_ROUGE - 1e-9 and libre:
                 self.axe = self.prioritaire.axe if self.prioritaire else self.axe_oppose
                 self.phase = "green"

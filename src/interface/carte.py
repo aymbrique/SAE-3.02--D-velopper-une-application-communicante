@@ -14,14 +14,16 @@ COULEURS_FEUX = {"red": "red", "amber": "orange", "green": "green"}
 
 
 class DessinVehicule(QGraphicsRectItem):
-    """Un vehicule est un rectangle que l'on deplace et tourne."""
+    """Rectangle représentant une voiture ou un véhicule de secours."""
 
     def __init__(self, etat):
+        """Crée le dessin à partir de l'état du véhicule."""
         super().__init__()
         self.setZValue(20)
         self.actualiser_etat(etat)
 
     def actualiser_etat(self, etat):
+        """Met à jour la taille, la couleur, la position et l'orientation du dessin."""
         if etat.type_vehicule == "car":
             self.setRect(-14, -7.5, 28, 15)
             couleur = "blue"
@@ -38,7 +40,10 @@ class DessinVehicule(QGraphicsRectItem):
 
 
 class VueCarte(QGraphicsView):
+    """Vue graphique du plan, des feux et des véhicules."""
+
     def __init__(self, parent=None):
+        """Prépare la scène et dessine les éléments fixes du plan."""
         super().__init__(parent)
         self.setScene(QGraphicsScene(self))
         self.setSceneRect(0, 0, LARGEUR_SCENE, HAUTEUR_SCENE)
@@ -54,15 +59,18 @@ class VueCarte(QGraphicsView):
         self._dessiner_carte()
 
     def rectangle(self, x, y, largeur, hauteur, couleur):
+        """Ajoute à la carte un rectangle coloré sans bordure et le renvoie."""
         return self.scene().addRect(x, y, largeur, hauteur,
                                    QPen(Qt.PenStyle.NoPen), QBrush(QColor(couleur)))
 
     def ecrire_texte(self, texte, x, y):
+        """Place un texte sur la carte et renvoie l'élément créé."""
         element = self.scene().addSimpleText(texte)
         element.setPos(x, y)
         return element
 
     def _dessiner_carte(self):
+        """Dessine les routes, la caserne, les bâtiments, les panneaux et les feux."""
         # Dessiner le reseau du croquis avec le style de la simulation existante.
         crayon_route = QPen(QColor("gray"), 2 * DEMI_LARGEUR_ROUTE)
         crayon_route.setCapStyle(Qt.PenCapStyle.FlatCap)
@@ -132,6 +140,7 @@ class VueCarte(QGraphicsView):
         self.ecrire_texte("EST", 1510, CY + 40)
 
     def actualiser(self, etat_simulation):
+        """Affiche les véhicules et les feux à partir de l'état de la simulation."""
         # Enlever les voitures qui ont fini leur trajet.
         identifiants = []
         for vehicule in etat_simulation.vehicules:
@@ -157,22 +166,27 @@ class VueCarte(QGraphicsView):
             feu.setBrush(QBrush(QColor(COULEURS_FEUX[signal])))
 
     def cadrer_plan(self):
+        """Adapte le plan à la fenêtre en conservant ses proportions."""
         self.resetTransform()
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def limites_circulation(self):
+        """Renvoie les limites visibles du plan, marges comprises."""
         visible = self.mapToScene(self.viewport().rect()).boundingRect()
         return (min(0, visible.left()), min(0, visible.top()),
                 max(LARGEUR_SCENE, visible.right()), max(HAUTEUR_SCENE, visible.bottom()))
 
     def resizeEvent(self, evenement):
+        """Recadre le plan après un changement de taille de la fenêtre."""
         super().resizeEvent(evenement)
         self.cadrer_plan()
 
     def showEvent(self, evenement):
+        """Recadre le plan lorsque la vue apparaît."""
         super().showEvent(evenement)
         self.cadrer_plan()
 
     def wheelEvent(self, evenement):
+        """Ignore le zoom à la molette pour conserver le cadrage automatique."""
         # Garder le cadrage fixe, y compris avec la molette et le pavé tactile.
         evenement.accept()

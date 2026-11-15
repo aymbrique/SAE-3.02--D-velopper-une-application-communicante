@@ -8,7 +8,10 @@ from controles_circulation import verifier_espacement
 
 
 class TestsCirculation(unittest.TestCase):
+    """Tests des files, des intersections et du passage des secours."""
+
     def creer_file(self, simulation, origine, nombre=6):
+        """Place des voitures à la ligne d'arrêt et renvoie la file créée."""
         voitures = []
         for index in range(nombre):
             voiture = simulation.ajouter_voiture(origine, "straight")
@@ -18,9 +21,11 @@ class TestsCirculation(unittest.TestCase):
         return voitures
 
     def verifier_distances(self, simulation):
+        """Vérifie les distances et les carrosseries de tous les véhicules présents."""
         verifier_espacement(self, simulation)
-    # Vérifie que deux files opposées avancent au vert en gardant leurs distances.
+
     def test_files_opposees(self):
+        """Vérifie que deux files opposées avancent au vert en gardant leurs distances."""
         for premier, second, axe in (("N", "S", "NS"), ("E", "W", "EW")):
             with self.subTest(axe=axe):
                 simulation = Simulation(debit=0)
@@ -45,8 +50,9 @@ class TestsCirculation(unittest.TestCase):
                     if not simulation.vehicules_engages:
                         break
                 self.assertFalse(simulation.vehicules_engages)
-    # Vérifie que la suivante avance dès que la voiture de tête sort du carrefour.
+
     def test_sortie_tete(self):
+        """Vérifie que la suivante avance dès que la voiture de tête sort du carrefour."""
         simulation = Simulation(debit=0)
         tete, suivante = self.creer_file(simulation, "N", 2)
         fin = tete.passage[1]
@@ -58,8 +64,9 @@ class TestsCirculation(unittest.TestCase):
         self.assertIn(suivante.identifiant, simulation.vehicules_engages)
         self.assertGreater(suivante.distance, suivante.passage[0])
         self.verifier_distances(simulation)
-    # Vérifie qu'une sortie bloquée empêche l'entrée dans le carrefour.
+
     def test_sortie_bloquee(self):
+        """Vérifie qu'une sortie bloquée empêche l'entrée dans le carrefour."""
         simulation = Simulation(debit=0)
         tete, suivante = self.creer_file(simulation, "N", 2)
         tete.distance = tete.passage[1] + DISTANCE_SECURITE / 2
@@ -70,8 +77,9 @@ class TestsCirculation(unittest.TestCase):
         self.assertEqual(suivante.distance, suivante.passage[0])
         self.assertNotIn(suivante.identifiant, simulation.vehicules_engages)
         self.verifier_distances(simulation)
-    # Vérifie qu'un secours avance derrière une voiture qui vient de sortir.
+
     def test_secours_suiveur(self):
+        """Vérifie qu'un secours avance derrière une voiture qui vient de sortir."""
         simulation = Simulation(debit=0)
         tete = simulation.ajouter_voiture("N", "straight")
         tete.distance = tete.passage[1] + .5
@@ -84,8 +92,9 @@ class TestsCirculation(unittest.TestCase):
         self.assertGreater(secours.distance, arret)
         self.assertIn(secours.identifiant, simulation.vehicules_engages)
         self.verifier_distances(simulation)
-    # Vérifie qu'un secours approche une voiture arrêtée sans la toucher.
+
     def test_secours_obstacle(self):
+        """Vérifie qu'un secours approche une voiture arrêtée sans la toucher."""
         simulation = Simulation(debit=0)
         tete = simulation.ajouter_voiture("N", "straight")
         tete.distance = tete.passage[1] + .5
@@ -101,8 +110,9 @@ class TestsCirculation(unittest.TestCase):
         for _ in range(100):
             simulation.avancer(PAS_TEMPS)
             self.verifier_distances(simulation)
-    # Vérifie que la suivante continue à avancer pendant le dégagement de la tête.
+
     def test_file_continue(self):
+        """Vérifie que la suivante continue à avancer pendant le dégagement de la tête."""
         simulation = Simulation(debit=0)
         tete, suivante = self.creer_file(simulation, "N", 2)
         tete.distance = tete.passage[1] + .5
@@ -114,8 +124,9 @@ class TestsCirculation(unittest.TestCase):
         self.assertAlmostEqual(suivante.distance - precedent, suivante.vitesse * PAS_TEMPS)
         self.assertAlmostEqual(tete.distance - suivante.distance, DISTANCE_SECURITE)
         self.assertFalse(suivante.en_attente)
-    # Vérifie qu'une voiture allant tout droit ralentit derrière une voiture qui tourne.
+
     def test_suivi_virage(self):
+        """Vérifie qu'une voiture allant tout droit ralentit derrière une voiture qui tourne."""
         for virage in ("left", "right"):
             with self.subTest(virage=virage):
                 simulation = Simulation(debit=0)
@@ -137,8 +148,9 @@ class TestsCirculation(unittest.TestCase):
                         break
                 self.assertIn(suivante.identifiant, simulation.vehicules_engages)
                 self.verifier_distances(simulation)
-    # Vérifie l'arrêt à l'orange et l'attente de l'autre axe jusqu'au dégagement.
+
     def test_degagement_orange(self):
+        """Vérifie l'arrêt à l'orange et l'attente de l'autre axe jusqu'au dégagement."""
         simulation = Simulation(debit=0)
         tete, suivante, arrete = self.creer_file(simulation, "N", 3)
         arret = tete.passage[0]
@@ -161,8 +173,9 @@ class TestsCirculation(unittest.TestCase):
         self.assertIn(autre.identifiant, simulation.vehicules_engages)
         self.assertNotIn(tete.identifiant, simulation.vehicules_engages)
         self.assertNotIn(suivante.identifiant, simulation.vehicules_engages)
-    # Vérifie qu'un secours suit un convoi sans réserver tout le carrefour.
+
     def test_secours_convoi(self):
+        """Vérifie qu'un secours suit un convoi sans réserver tout le carrefour."""
         simulation = Simulation(debit=0)
         tete, suivante = self.creer_file(simulation, "N", 2)
         simulation.demarrer_mission("01", "S")
@@ -179,8 +192,9 @@ class TestsCirculation(unittest.TestCase):
             simulation.avancer(PAS_TEMPS)
             self.verifier_distances(simulation)
         self.verifier_distances(simulation)
-    # Vérifie qu'un secours attend une réinsertion qui coupe son virage.
+
     def test_attente_reinsertion(self):
+        """Vérifie qu'un secours attend une réinsertion qui coupe son virage."""
         simulation = Simulation(debit=0)
         voiture = simulation.ajouter_voiture("N", "straight")
         voiture.distance = voiture.passage[0] + 64.8
@@ -207,8 +221,9 @@ class TestsCirculation(unittest.TestCase):
         self.assertTrue(est_entre)
         self.assertFalse(simulation.vehicules_engages)
         self.assertEqual(voiture.decalage_lateral, 0)
-    # Vérifie qu'un secours attend un raccordement occupé puis repart.
+
     def test_attente_raccordement(self):
+        """Vérifie qu'un secours attend un raccordement occupé puis repart."""
         simulation = Simulation(debit=0)
         simulation.demarrer_mission("01", "E")
         secours = simulation.obtenir_secours("01")

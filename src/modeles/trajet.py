@@ -5,10 +5,17 @@ from bisect import bisect_right
 
 
 def virage_arrondi(debut, controle1, controle2, fin, etapes=24):
-    """Calculer les points d'un virage arrondi avec une courbe lisse.
+    """Calcule les points d'un virage arrondi.
 
-    Les deux points de controle fixent la forme du virage. Cette formule
-    geometrique evite que la voiture change brutalement de direction.
+    Args:
+        debut: Point de départ du virage.
+        controle1: Premier point qui règle la forme de la courbe.
+        controle2: Second point qui règle la forme de la courbe.
+        fin: Point d'arrivée du virage.
+        etapes: Nombre de points à calculer après le départ.
+
+    Returns:
+        Les points de la courbe, sans le départ et avec l'arrivée.
     """
     resultat = []
     for index in range(1, etapes + 1):
@@ -23,7 +30,10 @@ def virage_arrondi(debut, controle1, controle2, fin, etapes=24):
 
 
 class Trajet:
+    """Parcours décrit par des points et leurs distances cumulées."""
+
     def __init__(self, nom, points):
+        """Vérifie les points et calcule la longueur de chaque portion du trajet."""
         if len(points) < 2:
             raise ValueError("Un trajet doit contenir au moins deux points.")
         self.nom = nom
@@ -39,7 +49,14 @@ class Trajet:
         self.longueur = self.distances[-1]
 
     def position_a(self, distance):
-        """Trouver la position et l'angle du vehicule sur le trajet."""
+        """Renvoie la position et l'orientation à une distance du départ.
+
+        Args:
+            distance: Distance parcourue, limitée aux bornes du trajet.
+
+        Returns:
+            Un tuple (x, y, angle), avec l'angle en degrés.
+        """
         distance = max(0.0, min(distance, self.longueur))
         index = min(len(self.points) - 2, bisect_right(self.distances, distance) - 1)
         debut = self.points[index]

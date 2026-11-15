@@ -10,6 +10,7 @@ from src.stockage.mariadb import StockageMariaDB
 
 
 def main():
+    """Crée les tables du projet et renvoie 0 si l'initialisation réussit."""
     analyseur = argparse.ArgumentParser(description=__doc__)
     analyseur.add_argument("--config", dest="configuration")
     arguments = analyseur.parse_args()
