@@ -804,27 +804,3 @@ class Simulation:
         rx, ry, _ = secours.trajet.position_a(arret)
         return hypot(x - rx, y - ry) < DISTANCE_SECURITE
 
-    def etat_simulation(self):
-        """Prépare les états des véhicules, les feux et les compteurs pour l'affichage."""
-        etats = []
-        for vehicule in self.vehicules:
-            x, y, orientation = vehicule.position
-            etape = "A l'arret" if vehicule.en_attente else "En circulation"
-            if vehicule.type_vehicule == "car" and vehicule.cede_aux:
-                etape = "Range sur le cote - priorite secours " + ", ".join(vehicule.cede_aux)
-            elif vehicule.type_vehicule == "car" and vehicule.decalage_lateral > 1e-6:
-                etape = "Reprise apres le passage du secours"
-            if vehicule.type_vehicule != "car":
-                if not vehicule.occupe:
-                    etape = "A la caserne"
-                elif vehicule.temps_intervention_restant > 0:
-                    etape = "Intervention - " + DESTINATIONS[vehicule.destination]
-                elif vehicule.intervention_effectuee:
-                    etape = "Retour a la caserne"
-                else:
-                    etape = "Vers le point " + DESTINATIONS[vehicule.destination]
-            etats.append(EtatVehicule(vehicule.identifiant, vehicule.type_vehicule, vehicule.couleur,
-                                       vehicule.trajet, x, y, orientation, vehicule.en_attente,
-                                       vehicule.occupe, vehicule.distance / vehicule.trajet.longueur, etape))
-        return EtatSimulation(tuple(etats), self.feux.signal("NS"), self.feux.signal("EW"),
-                     self.feux.description, self.feux.temps_restant, self.trajets_termines)
