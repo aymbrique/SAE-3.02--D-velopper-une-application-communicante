@@ -62,15 +62,15 @@ class FenetreCentre(QMainWindow):
     def actualiser(self):
         """Affiche les derniers états et l'historique fournis par le serveur."""
         instantane = self.serveur.instantane()
-        self.etiquette_connexion.setText(f"Ecoute sur {self.serveur.hote}:{self.serveur.port} - {instantane['status']}")
-        lignes = {ligne["identifiant"]: ligne for ligne in instantane["vehicles"]}
+        self.etiquette_connexion.setText(f"Ecoute sur {self.serveur.hote}:{self.serveur.port} - {instantane['statut']}")
+        lignes = {ligne["identifiant"]: ligne for ligne in instantane["vehicules"]}
         for index, identifiant in enumerate(("01", "02")):
             ligne = lignes.get(identifiant)
-            liaison_active = instantane["connected"] and identifiant in instantane["seen"]
+            liaison_active = instantane["connecte"] and identifiant in instantane["recus"]
             self._remplir_ligne(self.etats, index, (identifiant,
                 ligne["etat"] if ligne else "Inconnu", ligne["numero"] if ligne else "-",
                 ligne["recu_le"] if ligne else "-", "Active" if liaison_active else "Liaison interrompue"))
-        historique = instantane["history"]
+        historique = instantane["historique"]
         plus_recent = historique[0]["id"] if historique else None
         if plus_recent != self.dernier_historique:
             self.dernier_historique = plus_recent

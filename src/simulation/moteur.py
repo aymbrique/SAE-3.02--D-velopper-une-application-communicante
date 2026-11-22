@@ -45,7 +45,7 @@ class Simulation:
         self.voitures = []
         self.secours = []
         self.evenements = []
-        for identifiant, type_vehicule, y, couleur in (("01", "fire", PARKING_Y["01"], "#db6758"),
+        for identifiant, type_vehicule, y, couleur in (("01", "pompiers", PARKING_Y["01"], "#db6758"),
                                             ("02", "ambulance", PARKING_Y["02"], "#f8faf9")):
             trajet, passages, arret_intervention = trajet_secours(identifiant, y)
             self.secours.append(Vehicule(identifiant, type_vehicule, trajet, passages, couleur, VITESSE_SECOURS,
@@ -67,11 +67,11 @@ class Simulation:
     def demarrer_mission(self, identifiant, destination="S"):
         """Prépare le trajet et l'état d'un secours pour une intervention.
 
-        Args:
+        Paramètres :
             identifiant: Identifiant du secours à envoyer.
-            destination: Point d'intervention, parmi N, S, E et W.
+            destination: Point d'intervention, parmi N, S, E et O.
 
-        Returns:
+        Résultat :
             True si la mission démarre, False si le secours est déjà occupé.
         """
         vehicule = self.obtenir_secours(identifiant)
@@ -107,33 +107,33 @@ class Simulation:
         """Tire au sort un mouvement avec davantage de chances d'aller tout droit."""
         choix = self.aleatoire.randrange(200)
         if choix < 190:
-            return "straight"
+            return "tout_droit"
         if choix < 195:
-            return "left"
-        return "right"
+            return "gauche"
+        return "droite"
 
     def choisir_variante(self, origine, virage):
         """Choisit parfois une bifurcation après le carrefour, selon le trajet."""
-        if (origine, virage) in (("N", "straight"), ("E", "left"), ("W", "right")):
-            return "lower_west" if self.aleatoire.randrange(20) == 0 else None
-        if (origine, virage) in (("W", "straight"), ("N", "left"), ("S", "right")):
-            return "middle_north" if self.aleatoire.randrange(20) == 0 else None
+        if (origine, virage) in (("N", "tout_droit"), ("E", "gauche"), ("O", "droite")):
+            return "bifurcation_ouest_bas" if self.aleatoire.randrange(20) == 0 else None
+        if (origine, virage) in (("O", "tout_droit"), ("N", "gauche"), ("S", "droite")):
+            return "bifurcation_nord_milieu" if self.aleatoire.randrange(20) == 0 else None
         return None
 
     def ajouter_voiture(self, origine=None, virage=None, *, variante=None):
         """Crée une voiture si la limite et l'espace à l'entrée le permettent.
 
-        Args:
+        Paramètres :
             origine: Côté d'arrivée, ou None pour le tirer au sort.
             virage: Mouvement au carrefour, ou None pour le tirer au sort.
             variante: Bifurcation à utiliser après le carrefour, si elle est définie.
 
-        Returns:
+        Résultat :
             La voiture créée, ou None s'il manque de la place ou si la limite est atteinte.
         """
         if len(self.voitures) >= MAX_VOITURES:
             return None
-        origine = origine or self.aleatoire.choice(("N", "N", "N", "S", "E", "W"))
+        origine = origine or self.aleatoire.choice(("N", "N", "N", "S", "E", "O"))
         virage_automatique = virage is None
         virage = virage or self.choisir_virage()
         if virage_automatique and variante is None:
@@ -144,9 +144,9 @@ class Simulation:
             x_autre, y_autre, angle = autre.position
             if hypot(x - x_autre, y - y_autre) < DISTANCE_SECURITE:
                 return None
-        axe = "NS" if origine in ("N", "S") else "EW"
+        axe = "NS" if origine in ("N", "S") else "EO"
         couleur = self.aleatoire.choice(("#5eb9cc", "#e9bc65", "#9a8ed4", "#78b89c", "#e7967f"))
-        vehicule = Vehicule(f"C{self.prochain_identifiant:04}", "car", trajet,
+        vehicule = Vehicule(f"C{self.prochain_identifiant:04}", "voiture", trajet,
                           ((arret, sortie_voiture(trajet), axe),), couleur, 28, origine=origine, virage=virage)
         self.prochain_identifiant += 1
         self.voitures.append(vehicule)
@@ -155,10 +155,10 @@ class Simulation:
     def approche(self, vehicule):
         """Estime l'arrivée d'un secours à son prochain passage au carrefour.
 
-        Args:
+        Paramètres :
             vehicule: Secours dont on mesure l'approche.
 
-        Returns:
+        Résultat :
             La distance en mètres et le délai en secondes, ou (None, None) sans passage.
             Le délai vaut inf si le secours a une vitesse nulle.
         """
@@ -215,10 +215,10 @@ class Simulation:
     def avancer(self, duree):
         """Fait progresser la simulation par pas fixes.
 
-        Args:
+        Paramètres :
             duree: Temps à ajouter, en secondes simulées.
 
-        Raises:
+        Exceptions :
             ValueError: Si la durée est négative ou non finie.
         """
         if not isfinite(duree) or duree < 0:
@@ -261,7 +261,7 @@ class Simulation:
     def _ordre_deplacement(self, vehicule):
         """Classe les véhicules pour dégager le carrefour et avancer les têtes de file d'abord."""
         degage = (vehicule.identifiant in self.vehicules_engages
-                    or (vehicule.type_vehicule == "car" and vehicule.passage is None))
+                    or (vehicule.type_vehicule == "voiture" and vehicule.passage is None))
         return (not degage, -vehicule.distance, vehicule.identifiant)
 
     def _position(self, vehicule, distance, decalage=None):
@@ -270,10 +270,10 @@ class Simulation:
 
     def _mouvements_opposes_caserne(self, premier, second):
         """Indique si deux secours se croisent sur les voies distinctes de l'allée."""
-        if (premier.type_vehicule == "car" or second.type_vehicule == "car"
+        if (premier.type_vehicule == "voiture" or second.type_vehicule == "voiture"
                 or not premier.occupe or not second.occupe or premier.intervention_effectuee == second.intervention_effectuee):
             return False
-        return all(any(cle == "parking" and arret <= vehicule.distance < fin
+        return all(any(cle == "stationnement" and arret <= vehicule.distance < fin
                        for arret, fin, cle in vehicule.trajet.raccordements)
                    for vehicule in (premier, second))
 
@@ -292,7 +292,7 @@ class Simulation:
         precedent = hypot(premier.position[0] - second.position[0],
                          premier.position[1] - second.position[1])
         s_eloigne = distance > precedent + 1e-7
-        secours_sans_rapprochement = ((premier.type_vehicule != "car" or second.type_vehicule != "car")
+        secours_sans_rapprochement = ((premier.type_vehicule != "voiture" or second.type_vehicule != "voiture")
                             and distance >= precedent - 1e-7)
         return ((s_eloigne or secours_sans_rapprochement)
                 and carrosseries_separees(premier, position, second, position_autre))
@@ -417,9 +417,9 @@ class Simulation:
                     or cle == "F" and self._quitte_caserne(secours)))}
         self.acces_a_degager = {
             vehicule.identifiant for vehicule in self.vehicules
-            if (vehicule.type_vehicule == "car" or vehicule.occupe)
+            if (vehicule.type_vehicule == "voiture" or vehicule.occupe)
             and any(cle in cles and (arret < vehicule.distance < fin
-                    or vehicule.type_vehicule != "car" and arret == vehicule.distance)
+                    or vehicule.type_vehicule != "voiture" and arret == vehicule.distance)
                     for arret, fin, cle in vehicule.trajet.raccordements)}
 
     def _degage_file_acces(self, vehicule):
@@ -427,15 +427,15 @@ class Simulation:
         x, y, orientation = vehicule.trajet.position_a(vehicule.distance)
         dx, dy = cos(radians(orientation)), sin(radians(orientation))
         for autre in self.vehicules:
-            if autre.type_vehicule != "car" and autre.identifiant not in self.acces_a_degager:
+            if autre.type_vehicule != "voiture" and autre.identifiant not in self.acces_a_degager:
                 continue
-            en_manoeuvre = (autre.type_vehicule == "car" and autre.debut_manoeuvre is not None
+            en_manoeuvre = (autre.type_vehicule == "voiture" and autre.debut_manoeuvre is not None
                             and autre.decalage_cible == DECALAGE_RANGEMENT)
             if (autre is vehicule or not en_manoeuvre and autre.identifiant not in (
                     self.vehicules_engages | self.acces_a_degager)):
                 continue
             reference = autre.distance
-            if autre.type_vehicule != "car":
+            if autre.type_vehicule != "voiture":
                 # Un secours qui s'insere regarde la voie a la sortie de sa courbe.
                 reference = next((fin for arret, fin, _ in autre.trajet.raccordements
                                   if arret <= autre.distance < fin), reference)
@@ -455,7 +455,7 @@ class Simulation:
         for autre in self.voitures:
             if autre is vehicule:
                 continue
-            if vehicule.type_vehicule != "car" and not (autre.debut_manoeuvre is not None
+            if vehicule.type_vehicule != "voiture" and not (autre.debut_manoeuvre is not None
                                                and autre.decalage_cible == 0):
                 continue
             ox, oy, orientation_autre = autre.trajet.position_a(autre.distance)
@@ -469,15 +469,15 @@ class Simulation:
 
     def passages_compatibles(self, premier, second):
         """Indique si deux véhicules peuvent partager le carrefour avant contrôle des distances."""
-        if (premier.type_vehicule == "car") != (second.type_vehicule == "car"):
+        if (premier.type_vehicule == "voiture") != (second.type_vehicule == "voiture"):
             return True  # Le secours se guide sur les carrosseries, sans reserver tout le carrefour.
-        if premier.type_vehicule != "car" or premier.origine not in DIRECTIONS_OPPOSEES:
+        if premier.type_vehicule != "voiture" or premier.origine not in DIRECTIONS_OPPOSEES:
             return False
         if second.origine == premier.origine:
             return True
         return (second.origine == DIRECTIONS_OPPOSEES[premier.origine]
-                and premier.virage in ("straight", "right")
-                and second.virage in ("straight", "right"))
+                and premier.virage in ("tout_droit", "droite")
+                and second.virage in ("tout_droit", "droite"))
 
     def _suit_sortie(self, vehicule, fin, autre, fin_autre):
         """Vérifie si un véhicule sorti et en mouvement peut être suivi dans la même voie."""
@@ -506,7 +506,7 @@ class Simulation:
     def _peut_entrer(self, vehicule):
         """Vérifie le feu, les priorités, les véhicules engagés et la place en sortie."""
         arret, fin, axe = vehicule.passage
-        if vehicule.type_vehicule == "car" and vehicule.decalage_lateral == 0:
+        if vehicule.type_vehicule == "voiture" and vehicule.decalage_lateral == 0:
             for autre in self.voitures:
                 if (autre is not vehicule and autre.origine == vehicule.origine
                         and autre.decalage_lateral > 0 and not autre.cede_aux
@@ -516,7 +516,7 @@ class Simulation:
             if autre.identifiant in self.vehicules_engages and autre is not vehicule:
                 if not self.passages_compatibles(vehicule, autre):
                     return False
-                if (vehicule.type_vehicule != "car" and autre.type_vehicule == "car"
+                if (vehicule.type_vehicule != "voiture" and autre.type_vehicule == "voiture"
                         and self._conflit_devant_carrefour(vehicule, autre)):
                     return False
                 if vehicule.decalage_lateral > 0 or autre.decalage_lateral > 0:
@@ -524,15 +524,15 @@ class Simulation:
                     ox, oy, _ = autre.position
                     if hypot(point[0] - ox, point[1] - oy) < DISTANCE_SECURITE - 1e-7:
                         return False
-        if self.feux.signal(axe) != "green":
+        if self.feux.signal(axe) != "vert":
             return False
-        if vehicule.type_vehicule == "car" and self.feux.prioritaire:
+        if vehicule.type_vehicule == "voiture" and self.feux.prioritaire:
             secours = self.obtenir_secours(self.feux.prioritaire.identifiant)
             if secours.passage and not self._bloque_approche(vehicule, secours, secours.passage[0]):
                 return False
-        if vehicule.type_vehicule != "car" and self.feux.prioritaire and self.feux.prioritaire.identifiant != vehicule.identifiant:
+        if vehicule.type_vehicule != "voiture" and self.feux.prioritaire and self.feux.prioritaire.identifiant != vehicule.identifiant:
             return False
-        if vehicule.type_vehicule != "car":
+        if vehicule.type_vehicule != "voiture":
             return self._trajet_libre(vehicule, vehicule.distance + min(.05, vehicule.vitesse * PAS_TEMPS))
         suivants = self._vehicules_sortis(vehicule, fin)
         for autre in self.vehicules:
@@ -574,9 +574,9 @@ class Simulation:
     def _deplacer(self, vehicule):
         """Calcule une avancée possible, puis actualise la position et les étapes de mission."""
         vehicule.vitesse_actuelle = 0.0
-        if vehicule.type_vehicule != "car" and not vehicule.occupe:
+        if vehicule.type_vehicule != "voiture" and not vehicule.occupe:
             return
-        if (vehicule.type_vehicule == "car" and vehicule.cede_aux
+        if (vehicule.type_vehicule == "voiture" and vehicule.cede_aux
                 and voiture_rangee(vehicule) and not self._degage_file_acces(vehicule)):
             vehicule.en_attente = True
             return
@@ -586,10 +586,10 @@ class Simulation:
             return
         ancien = vehicule.distance
         vitesse = vehicule.vitesse
-        if vehicule.type_vehicule == "car" and any(debut <= ancien < fin
+        if vehicule.type_vehicule == "voiture" and any(debut <= ancien < fin
                                          for debut, fin in vehicule.trajet.zones_virage):
             vitesse *= FACTEUR_VITESSE_VIRAGE
-        if vehicule.type_vehicule == "car":
+        if vehicule.type_vehicule == "voiture":
             x, y, angle = vehicule.position
             dx, dy = cos(radians(angle)), sin(radians(angle))
             for autre in self.voitures:
@@ -603,14 +603,14 @@ class Simulation:
                     vitesse = min(vitesse, 18.0)
                 if autre.identifiant not in self.vehicules_engages:
                     continue
-                if autre.virage == "straight" or autre.virage == vehicule.virage:
+                if autre.virage == "tout_droit" or autre.virage == vehicule.virage:
                     continue
                 if 0 < avance_relative < 150 and ecart_lateral < 70:
                     vitesse = min(vitesse, 18.0)
         # Calculer une position visée, puis la limiter selon les obstacles.
         cible = min(ancien + vitesse * PAS_TEMPS, vehicule.trajet.longueur)
         cible = self._suivre_file(vehicule, cible)
-        if (vehicule.type_vehicule == "car" and vehicule.cede_aux
+        if (vehicule.type_vehicule == "voiture" and vehicule.cede_aux
                 and vehicule.debut_manoeuvre is not None):
             cible = min(cible, vehicule.debut_manoeuvre + vehicule.longueur_manoeuvre)
         cible = self._limiter_aux_raccordements(vehicule, ancien, cible)
@@ -648,7 +648,7 @@ class Simulation:
             vehicule.decalage_lateral = vehicule.decalage_cible
             vehicule.debut_manoeuvre = None
         vehicule.en_attente = vehicule.distance <= ancien + 1e-9
-        if (vehicule.type_vehicule == "car" and vehicule.cede_aux and voiture_rangee(vehicule)
+        if (vehicule.type_vehicule == "voiture" and vehicule.cede_aux and voiture_rangee(vehicule)
                 and not self._degage_file_acces(vehicule)):
             vehicule.en_attente = True
             vehicule.vitesse_actuelle = 0.0
@@ -660,7 +660,7 @@ class Simulation:
             vehicule.distance = vehicule.arret_intervention
             vehicule.intervention_effectuee = True
             vehicule.temps_intervention_restant = DUREE_INTERVENTION
-        if vehicule.type_vehicule != "car" and vehicule.distance >= vehicule.trajet.longueur - 1e-6:
+        if vehicule.type_vehicule != "voiture" and vehicule.distance >= vehicule.trajet.longueur - 1e-6:
             vehicule.occupe = False
             vehicule.distance = 0.0
             vehicule.decalage_lateral = 0.0
@@ -686,7 +686,7 @@ class Simulation:
                 return False
         suivants = set()
         for autre in self.vehicules:
-            if autre is vehicule or (autre.type_vehicule != "car" and not autre.occupe):
+            if autre is vehicule or (autre.type_vehicule != "voiture" and not autre.occupe):
                 continue
             for arret_autre, fin_autre, cle_autre in autre.trajet.raccordements:
                 if cle != cle_autre:
@@ -699,7 +699,7 @@ class Simulation:
                 elif self._suit_sortie(vehicule, fin, autre, fin_autre):
                     suivants.add(autre.identifiant)
                 elif arret_autre < autre.distance < fin_autre:
-                    if cle == "parking" and self._mouvements_opposes_caserne(vehicule, autre):
+                    if cle == "stationnement" and self._mouvements_opposes_caserne(vehicule, autre):
                         # Le secours sortant peut attendre a F sans retenir toute
                         # l'allee du retour. Le balayage controle les gabarits.
                         continue
@@ -708,8 +708,8 @@ class Simulation:
                         return False
 
         # Vérifier la sortie aussi pour ne pas bloquer le véhicule au milieu.
-        fin_balaye, marge = fin, (1 if vehicule.type_vehicule != "car" else 46)
-        if cle == "parking" and arret == 0:
+        fin_balaye, marge = fin, (1 if vehicule.type_vehicule != "voiture" else 46)
+        if cle == "stationnement" and arret == 0:
             fin_balaye = next(debut for debut, _, nom in vehicule.trajet.raccordements if nom == "F")
             marge = 1
         for decalage in range(0, int(fin_balaye - arret) + marge, 6):
@@ -751,7 +751,7 @@ class Simulation:
 
     def raccordements_compatibles(self, premier, arret, cle, second, arret_autre):
         """Vérifie si deux voitures suivent la même voie ou deux voies droites opposées."""
-        if premier.type_vehicule != "car" or second.type_vehicule != "car":
+        if premier.type_vehicule != "voiture" or second.type_vehicule != "voiture":
             return False
         mouvement_premier = premier.trajet.mouvements_raccordements.get((arret, cle))
         mouvement_second = second.trajet.mouvements_raccordements.get((arret_autre, cle))

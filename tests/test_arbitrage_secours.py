@@ -12,7 +12,7 @@ class TestsArbitrageSecours(unittest.TestCase):
         """Le camion est parti avant l'ambulance mais demande le passage après elle."""
         feux = Feux()
         camion = DemandePriorite("01", "NS", debut_mission=2, date_demande=9)
-        ambulance = DemandePriorite("02", "EW", debut_mission=4, date_demande=7)
+        ambulance = DemandePriorite("02", "EO", debut_mission=4, date_demande=7)
 
         feux.avancer(0.05, [ambulance, camion])
         self.assertEqual(feux.prioritaire.identifiant, "01")
@@ -22,7 +22,7 @@ class TestsArbitrageSecours(unittest.TestCase):
         """L'ambulance déjà engagée termine avant de céder le passage au camion."""
         feux = Feux()
         ambulance = DemandePriorite("02", "NS", 5, 8, engage=True)
-        camion = DemandePriorite("01", "EW", 1, 9)
+        camion = DemandePriorite("01", "EO", 1, 9)
 
         feux.avancer(0.05, [ambulance])
         feux.avancer(0.05, [camion, ambulance])
@@ -36,7 +36,7 @@ class TestsArbitrageSecours(unittest.TestCase):
         """À début de mission égal, la première demande passe en premier."""
         feux = Feux()
         camion = DemandePriorite("01", "NS", 2, 9)
-        ambulance = DemandePriorite("02", "EW", 2, 7)
+        ambulance = DemandePriorite("02", "EO", 2, 7)
         feux.avancer(0.05, [camion, ambulance])
         self.assertEqual(feux.prioritaire.identifiant, "02")
 

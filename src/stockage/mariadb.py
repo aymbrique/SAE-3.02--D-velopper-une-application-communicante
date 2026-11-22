@@ -30,13 +30,13 @@ class StockageMariaDB:
     def enregistrer(self, message):
         """Enregistre un état et son historique dans une même transaction.
 
-        Args:
+        Paramètres :
             message: État validé contenant l'identifiant, la session et le numéro.
 
-        Returns:
+        Résultat :
             True si l'état est enregistré, False si la mise à jour est ancienne ou déjà reçue.
 
-        Raises:
+        Exceptions :
             pymysql.MySQLError: Si une requête ou la connexion à MariaDB échoue.
         """
         # Une transaction regroupe l'historique et l'etat courant.
@@ -77,4 +77,4 @@ class StockageMariaDB:
                 vehicules = curseur.fetchall()
                 curseur.execute("SELECT * FROM historique_etats ORDER BY id DESC LIMIT 100")
                 historique = curseur.fetchall()
-        return {"vehicles": vehicules, "history": historique}
+        return {"vehicules": vehicules, "historique": historique}

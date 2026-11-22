@@ -47,10 +47,10 @@ class Vehicule:
     def decalage_lateral_a(self, distance):
         """Calcule le décalage et le braquage pendant une manœuvre.
 
-        Args:
+        Paramètres :
             distance: Distance parcourue sur le trajet.
 
-        Returns:
+        Résultat :
             Le décalage latéral en unités du plan et le braquage en degrés.
         """
         if self.debut_manoeuvre is None:
@@ -112,7 +112,7 @@ class EtatSimulation:
         """Renvoie uniquement les états des voitures ordinaires."""
         voitures = []
         for vehicule in self.vehicules:
-            if vehicule.type_vehicule == "car":
+            if vehicule.type_vehicule == "voiture":
                 voitures.append(vehicule)
         return tuple(voitures)
 
@@ -121,6 +121,6 @@ class EtatSimulation:
         """Renvoie uniquement les états des véhicules de secours."""
         secours = []
         for vehicule in self.vehicules:
-            if vehicule.type_vehicule != "car":
+            if vehicule.type_vehicule != "voiture":
                 secours.append(vehicule)
         return tuple(secours)

@@ -23,13 +23,13 @@ class Decodeur:
     def alimenter(self, donnees):
         """Ajoute les octets reçus et extrait les messages complets.
 
-        Args:
+        Paramètres :
             donnees: Nouveaux octets reçus par la socket.
 
-        Returns:
+        Résultat :
             La liste des objets JSON complets ; les octets restants sont conservés.
 
-        Raises:
+        Exceptions :
             ValueError: Si un message est trop long, invalide ou différent d'un objet JSON.
         """
         # TCP peut livrer un message en plusieurs morceaux : garder le debut.
@@ -53,7 +53,7 @@ class Decodeur:
 
 def valider(message):
     """Vérifie les champs d'un message et le renvoie, ou lève ValueError."""
-    if message.get("type") == "ping":
+    if message.get("type") == "verification_liaison":
         return message
     if message.get("type") != "etat":
         raise ValueError("Type de message inconnu")

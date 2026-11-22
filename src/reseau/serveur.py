@@ -23,14 +23,14 @@ class ServeurCentre:
         self.connecte = False
         self.recus = set()
         self.statut = "En attente de la simulation"
-        self.donnees = {"vehicles": [], "history": []}
+        self.donnees = {"vehicules": [], "historique": []}
 
     def instantane(self):
         """Renvoie les dernières données et le statut de liaison sous verrou."""
         with self.verrou:
-            return {"vehicles": self.donnees["vehicles"], "history": self.donnees["history"],
-                    "connected": self.connecte, "status": self.statut,
-                    "seen": set(self.recus)}
+            return {"vehicules": self.donnees["vehicules"], "historique": self.donnees["historique"],
+                    "connecte": self.connecte, "statut": self.statut,
+                    "recus": set(self.recus)}
 
     def _modifier_statut(self, texte, connecte=False):
         """Met à jour le texte du statut et l'indicateur de connexion sous verrou."""
@@ -92,8 +92,8 @@ class ServeurCentre:
                             raise ConnectionError("Client deconnecte")
                         for message in decodeur.alimenter(morceau):
                             valider(message)
-                            if message["type"] == "ping":
-                                client_actif.sendall(encoder({"type": "pong"}))
+                            if message["type"] == "verification_liaison":
+                                client_actif.sendall(encoder({"type": "liaison_confirmee"}))
                             else:
                                 if session and session != message["session"]:
                                     raise ValueError("Changement de session sur une connexion")
@@ -104,12 +104,12 @@ class ServeurCentre:
                                 with self.verrou:
                                     self.donnees = mis_a_jour
                                     self.recus.add(message["id"])
-                                client_actif.sendall(encoder({"type": "ack", "session": session,
+                                client_actif.sendall(encoder({"type": "accuse_reception", "session": session,
                                                      "id": message["id"], "numero": message["numero"]}))
                                 self._modifier_statut("Liaison active", True)
                         derniere_reception = monotonic()
                     except Exception as error:
-                        # Aucun ACK si la transaction echoue : le client conservera son message.
+                        # Aucun accusé de réception si la transaction echoue : le client conservera son message.
                         self._modifier_statut(f"Liaison interrompue : {type(error).__name__}")
                         client_actif.close()
                         client_actif = None

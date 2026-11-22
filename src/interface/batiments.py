@@ -41,7 +41,7 @@ def dessiner_mairie(scene, x, y):
         rectangle(scene, x + dx, y + 32, 10, 62, "#fff6e4")
     rectangle(scene, x + 63, y + 57, 24, 43, "#705b4c")
     rectangle(scene, x + 65, y - 18, 7, 12, "#2454a6")
-    rectangle(scene, x + 72, y - 18, 7, 12, "white")
+    rectangle(scene, x + 72, y - 18, 7, 12, "#ffffff")
     rectangle(scene, x + 79, y - 18, 7, 12, "#d54b43")
 
 
@@ -65,7 +65,7 @@ def dessiner_supermarche(scene, x, y):
     rectangle(scene, x, y, 220, 10, "#566a7c")
     rectangle(scene, x + 12, y + 18, 196, 30, "#245c9e")
     rectangle(scene, x + 18, y + 24, 8, 18, "#ef9d38")
-    etiquette(scene, "E.Leclerc", x + 30, y + 23, 170, 20, "white")
+    etiquette(scene, "E.Leclerc", x + 30, y + 23, 170, 20, "#ffffff")
     for dx in (16, 62, 156):
         rectangle(scene, x + dx, y + 62, 38, 32, "#9fc4d2")
     rectangle(scene, x + 110, y + 60, 32, 48, "#496578")
@@ -78,7 +78,7 @@ def dessiner_iut(scene, x, y):
     rectangle(scene, x, y, 220, 108, "#e3e2d8")
     rectangle(scene, x, y, 220, 8, "#456477")
     rectangle(scene, x + 12, y + 16, 196, 28, "#397a87")
-    etiquette(scene, "IUT de Colmar", x + 12, y + 21, 196, 17, "white")
+    etiquette(scene, "IUT de Colmar", x + 12, y + 21, 196, 17, "#ffffff")
     for dx in (16, 56, 136, 176):
         rectangle(scene, x + dx, y + 54, 28, 18, "#8fb4c9")
         rectangle(scene, x + dx, y + 80, 28, 18, "#8fb4c9")
@@ -88,24 +88,24 @@ def dessiner_iut(scene, x, y):
 
 def dessiner_sites_intervention(scene):
     """Dessine les bâtiments et les parkings en laissant les accès libres."""
-    batiments = {"W": dessiner_mairie, "S": dessiner_restaurant,
+    batiments = {"O": dessiner_mairie, "S": dessiner_restaurant,
                  "E": dessiner_supermarche, "N": dessiner_iut}
-    numeros = {"W": 1, "S": 2, "N": 3, "E": 4}
+    numeros = {"O": 1, "S": 2, "N": 3, "E": 4}
     for cote, entree in ENTREES_SITES.items():
         x, y = POINTS_INTERVENTION[cote]
         bord_route = NOEUDS[entree][1] - DEMI_LARGEUR_ROUTE
         # Le parking entoure le demi-tour existant ; l'allee rejoint le bord
         # de la chaussee. Aucun decor ne coupe le trajet aller ou retour.
-        rectangle(scene, x - 56, y - 24, 112, 88, "lightgray")
-        rectangle(scene, x - 48, y + 64, 96, bord_route - y - 64, "lightgray")
+        rectangle(scene, x - 56, y - 24, 112, 88, "#d3d3d3")
+        rectangle(scene, x - 48, y + 64, 96, bord_route - y - 64, "#d3d3d3")
         scene.addRect(x - 24, y - 15, 48, 30,
-                      QPen(QColor("white"), 2), QBrush(QColor("#ffe091")))
+                      QPen(QColor("#ffffff"), 2), QBrush(QColor("#ffe091")))
         etiquette(scene, "P", x - 15, y + 34, 30, 18, "#526a80")
         etiquette(scene, f"Point {numeros[cote]}", x - 56, y - 45, 112, 12)
 
         # A l'ouest, le batiment est a droite du parking. A l'est, il est
         # a gauche : les quatre emplacements restent hors des routes.
-        if cote in ("W", "S"):
+        if cote in ("O", "S"):
             batiments[cote](scene, x + 56, y - 30)
         else:
             batiments[cote](scene, x - 56 - 220, y - 28)

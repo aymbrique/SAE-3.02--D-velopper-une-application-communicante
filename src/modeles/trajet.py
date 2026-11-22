@@ -7,14 +7,14 @@ from bisect import bisect_right
 def virage_arrondi(debut, controle1, controle2, fin, etapes=24):
     """Calcule les points d'un virage arrondi.
 
-    Args:
+    Paramètres :
         debut: Point de départ du virage.
         controle1: Premier point qui règle la forme de la courbe.
         controle2: Second point qui règle la forme de la courbe.
         fin: Point d'arrivée du virage.
         etapes: Nombre de points à calculer après le départ.
 
-    Returns:
+    Résultat :
         Les points de la courbe, sans le départ et avec l'arrivée.
     """
     resultat = []
@@ -51,10 +51,10 @@ class Trajet:
     def position_a(self, distance):
         """Renvoie la position et l'orientation à une distance du départ.
 
-        Args:
+        Paramètres :
             distance: Distance parcourue, limitée aux bornes du trajet.
 
-        Returns:
+        Résultat :
             Un tuple (x, y, angle), avec l'angle en degrés.
         """
         distance = max(0.0, min(distance, self.longueur))

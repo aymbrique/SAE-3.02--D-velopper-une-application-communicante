@@ -12,7 +12,7 @@ class TestsCirculation(unittest.TestCase):
     def test_arret_feu(self):
         """Une voiture s'arrête au rouge et repart au vert."""
         simulation = Simulation(debit=0)
-        voiture = simulation.ajouter_voiture("E", "straight")
+        voiture = simulation.ajouter_voiture("E", "tout_droit")
         arret = voiture.passage[0]
         voiture.distance = arret - 2
 
@@ -25,8 +25,8 @@ class TestsCirculation(unittest.TestCase):
     def test_files_opposees(self):
         """Deux voitures allant tout droit en sens opposés passent ensemble."""
         simulation = Simulation(debit=0)
-        nord = simulation.ajouter_voiture("N", "straight")
-        sud = simulation.ajouter_voiture("S", "straight")
+        nord = simulation.ajouter_voiture("N", "tout_droit")
+        sud = simulation.ajouter_voiture("S", "tout_droit")
         nord.distance = nord.passage[0]
         sud.distance = sud.passage[0]
 
@@ -38,11 +38,11 @@ class TestsCirculation(unittest.TestCase):
     def test_sortie_bloquee(self):
         """Même au vert, une voiture attend si la sortie est encombrée."""
         simulation = Simulation(debit=0)
-        tete = simulation.ajouter_voiture("N", "straight")
+        tete = simulation.ajouter_voiture("N", "tout_droit")
         tete.distance = tete.passage[1] + DISTANCE_SECURITE / 2
         tete.indice_passage = 1
         tete.vitesse = 0
-        suivante = simulation.ajouter_voiture("N", "straight")
+        suivante = simulation.ajouter_voiture("N", "tout_droit")
         suivante.distance = suivante.passage[0]
 
         simulation.avancer(1)

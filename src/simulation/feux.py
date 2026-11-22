@@ -27,12 +27,12 @@ class Feux:
     def __init__(self):
         """Démarre le cycle au vert nord-sud avec des réserves de temps vides."""
         self.axe = "NS"
-        self.phase = "green"
+        self.phase = "vert"
         self.temps_ecoule = 0.0
         self.prioritaire = None
         self.priorite_verrouillee = False
         self.vert_prioritaire = False
-        self.reserve_temps = {"NS": 0.0, "EW": 0.0}
+        self.reserve_temps = {"NS": 0.0, "EO": 0.0}
         self.en_compensation = False
         self.bonus_compensation = 0.0
         self.terminer_vert = False
@@ -40,28 +40,28 @@ class Feux:
     @property
     def axe_oppose(self):
         """Renvoie l'autre axe de circulation."""
-        return "EW" if self.axe == "NS" else "NS"
+        return "EO" if self.axe == "NS" else "NS"
 
     def signal(self, axe):
         """Renvoie la couleur du feu pour l'axe demandé."""
-        if axe == self.axe and self.phase != "all_red":
+        if axe == self.axe and self.phase != "tout_rouge":
             return self.phase
-        return "red"
+        return "rouge"
 
     @property
     def temps_restant(self):
         """Renvoie la durée restante de la phase, bonus compris, en secondes."""
-        duree = {"green": self.DUREE_VERT + self.bonus_compensation,
-                    "amber": self.DUREE_ORANGE, "all_red": self.DUREE_TOUT_ROUGE}[self.phase]
+        duree = {"vert": self.DUREE_VERT + self.bonus_compensation,
+                    "orange": self.DUREE_ORANGE, "tout_rouge": self.DUREE_TOUT_ROUGE}[self.phase]
         return max(0.0, duree - self.temps_ecoule)
 
     @property
     def description(self):
         """Renvoie le texte de la phase actuelle destiné à l'interface."""
         axe = "Nord-Sud" if self.axe == "NS" else "Est-Ouest"
-        if self.phase == "all_red":
+        if self.phase == "tout_rouge":
             return "Transition : tout rouge"
-        if self.phase == "amber":
+        if self.phase == "orange":
             return f"{axe} : orange"
         if self.prioritaire and self.prioritaire.axe == self.axe:
             return f"Priorite secours {self.prioritaire.identifiant} - {axe}"
@@ -101,7 +101,7 @@ class Feux:
     def avancer(self, dt, demandes=(), occupe=False, libre=True):
         """Met à jour les feux et les réserves de temps pour un pas de simulation.
 
-        Args:
+        Paramètres :
             dt: Durée du pas en secondes simulées.
             demandes: Demandes de priorité actuelles des secours.
             occupe: Indicateur de mission conservé dans l'appel, sans effet ici.
@@ -115,7 +115,7 @@ class Feux:
             self.bonus_compensation = 0.0
 
         # Le vert prioritaire accumule du retard ; le bonus le restitue ensuite.
-        if self.phase == "green":
+        if self.phase == "vert":
             maintient_priorite = self.prioritaire is not None and self.prioritaire.axe == self.axe
             if maintient_priorite:
                 self.vert_prioritaire = True
@@ -137,20 +137,20 @@ class Feux:
             interrompu = self.terminer_vert and (self.vert_prioritaire or self.temps_ecoule >= self.DUREE_VERT - 1e-9)
             priorite_autre_axe = self.prioritaire is not None and self.prioritaire.axe != self.axe
             if not maintient_priorite and (termine or interrompu or priorite_autre_axe):
-                self.phase = "amber"
+                self.phase = "orange"
                 self.temps_ecoule = 0.0
                 self.en_compensation = False
-        elif self.phase == "amber":
+        elif self.phase == "orange":
             self.temps_ecoule += dt
             if self.temps_ecoule >= self.DUREE_ORANGE - 1e-9:
-                self.phase = "all_red"
+                self.phase = "tout_rouge"
                 self.temps_ecoule = 0.0
         else:
             self.temps_ecoule += dt
             # Attendre un carrefour vide avant de donner le vert au nouvel axe.
             if self.temps_ecoule >= self.DUREE_TOUT_ROUGE - 1e-9 and libre:
                 self.axe = self.prioritaire.axe if self.prioritaire else self.axe_oppose
-                self.phase = "green"
+                self.phase = "vert"
                 self.temps_ecoule = 0.0
                 self.vert_prioritaire = False
                 self.terminer_vert = False

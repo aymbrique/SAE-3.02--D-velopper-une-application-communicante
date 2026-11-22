@@ -10,7 +10,7 @@ from src.modeles.plan import (CX, CY, DECALAGE_VOIE, DEMI_LARGEUR_ROUTE, HAUTEUR
                                NOEUDS, TRONCONS_ROUTES, PARKING_Y)
 
 
-COULEURS_FEUX = {"red": "red", "amber": "orange", "green": "green"}
+COULEURS_FEUX = {"rouge": "#ff0000", "orange": "#ffa500", "vert": "#008000"}
 
 
 class DessinVehicule(QGraphicsRectItem):
@@ -24,17 +24,17 @@ class DessinVehicule(QGraphicsRectItem):
 
     def actualiser_etat(self, etat):
         """Met à jour la taille, la couleur, la position et l'orientation du dessin."""
-        if etat.type_vehicule == "car":
+        if etat.type_vehicule == "voiture":
             self.setRect(-14, -7.5, 28, 15)
-            couleur = "blue"
+            couleur = "#0000ff"
         else:
             self.setRect(-18, -9, 36, 18)
-            if etat.type_vehicule == "fire":
-                couleur = "red"
+            if etat.type_vehicule == "pompiers":
+                couleur = "#ff0000"
             else:
-                couleur = "white"
+                couleur = "#ffffff"
         self.setBrush(QBrush(QColor(couleur)))
-        self.setPen(QPen(QColor("black")))
+        self.setPen(QPen(QColor("#000000")))
         self.setPos(etat.x, etat.y)
         self.setRotation(etat.orientation)
 
@@ -72,9 +72,9 @@ class VueCarte(QGraphicsView):
     def _dessiner_carte(self):
         """Dessine les routes, la caserne, les bâtiments, les panneaux et les feux."""
         # Dessiner le reseau du croquis avec le style de la simulation existante.
-        crayon_route = QPen(QColor("gray"), 2 * DEMI_LARGEUR_ROUTE)
+        crayon_route = QPen(QColor("#808080"), 2 * DEMI_LARGEUR_ROUTE)
         crayon_route.setCapStyle(Qt.PenCapStyle.FlatCap)
-        marquage = QPen(QColor("white"), 2, Qt.PenStyle.DashLine)
+        marquage = QPen(QColor("#ffffff"), 2, Qt.PenStyle.DashLine)
         routes = []
         for premier, second in TRONCONS_ROUTES:
             # Continuer aussi dans les marges visibles lorsque la fenetre n'a
@@ -92,22 +92,22 @@ class VueCarte(QGraphicsView):
             (x1, y1), (x2, y2) = points
             if (premier, second) == ("R", "Q"):
                 # Une seule voie descendante : la moitie droite reste en herbe.
-                self.rectangle(x1 - DEMI_LARGEUR_ROUTE, y1, DEMI_LARGEUR_ROUTE, y2 - y1, "gray")
+                self.rectangle(x1 - DEMI_LARGEUR_ROUTE, y1, DEMI_LARGEUR_ROUTE, y2 - y1, "#808080")
                 continue
             routes.append((x1, y1, x2, y2))
             self.scene().addLine(x1, y1, x2, y2, crayon_route)
         for x1, y1, x2, y2 in routes:
             self.scene().addLine(x1, y1, x2, y2, marquage)
         # Enlever les pointilles au milieu des raccordements.
-        for cle in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"):
+        for cle in ("C", "F", "O", "B", "R", "E", "D", "L", "Q", "U", "H"):
             x, y = NOEUDS[cle]
             self.rectangle(x - DEMI_LARGEUR_ROUTE, y - DEMI_LARGEUR_ROUTE,
-                           2 * DEMI_LARGEUR_ROUTE, 2 * DEMI_LARGEUR_ROUTE, "gray")
+                           2 * DEMI_LARGEUR_ROUTE, 2 * DEMI_LARGEUR_ROUTE, "#808080")
 
         # Ce raccordement ne se prend que vers le bas, depuis la gauche de R.
         x = NOEUDS["R"][0] - DECALAGE_VOIE
         y = (NOEUDS["R"][1] + NOEUDS["Q"][1]) / 2
-        fleche = QPen(QColor("white"), 3)
+        fleche = QPen(QColor("#ffffff"), 3)
         for x1, y1, x2, y2 in ((x, y - 24, x, y + 24),
                                (x - 9, y + 12, x, y + 24),
                                (x + 9, y + 12, x, y + 24)):
@@ -115,8 +115,8 @@ class VueCarte(QGraphicsView):
         dessiner_travaux(self.scene())
 
         # Caserne et allee d'acces, a gauche de l'axe vertical principal.
-        self.rectangle(190, 80, 180, 190, "lightgray")
-        self.rectangle(340, 130, CX - DEMI_LARGEUR_ROUTE - 340, 140, "lightgray")
+        self.rectangle(190, 80, 180, 190, "#d3d3d3")
+        self.rectangle(340, 130, CX - DEMI_LARGEUR_ROUTE - 340, 140, "#d3d3d3")
         self.ecrire_texte("CASERNE", 225, 55)
         for identifiant, y in PARKING_Y.items():
             self.ecrire_texte("Place " + identifiant, 197, y - 9)
@@ -125,16 +125,16 @@ class VueCarte(QGraphicsView):
         dessiner_panneaux_priorite(self.scene())
 
         # Un seul carrefour a feux, a l'emplacement de la croix verte du croquis.
-        arret = QPen(QColor("white"), 4)
+        arret = QPen(QColor("#ffffff"), 4)
         self.scene().addLine(CX - 82, CY + 8, CX - 82, CY + DEMI_LARGEUR_ROUTE - 8, arret)
         self.scene().addLine(CX + 8, CY + 82, CX + DEMI_LARGEUR_ROUTE - 8, CY + 82, arret)
         self.scene().addLine(CX + 82, CY - DEMI_LARGEUR_ROUTE + 8, CX + 82, CY - 8, arret)
         self.scene().addLine(CX - DEMI_LARGEUR_ROUTE + 8, CY - 82, CX - 8, CY - 82, arret)
         positions = {"N": (CX - 100, CY - 105), "S": (CX + 90, CY + 90),
-                     "E": (CX + 90, CY - 105), "W": (CX - 100, CY + 90)}
+                     "E": (CX + 90, CY - 105), "O": (CX - 100, CY + 90)}
         for origine, (x, y) in positions.items():
             self.feux[origine] = self.scene().addEllipse(
-                x, y, 20, 20, QPen(QColor("black")), QBrush(QColor("red")))
+                x, y, 20, 20, QPen(QColor("#000000")), QBrush(QColor("#ff0000")))
         self.ecrire_texte("NORD", CX - 20, 5)
         self.ecrire_texte("OUEST", 25, CY - 58)
         self.ecrire_texte("EST", 1510, CY + 40)

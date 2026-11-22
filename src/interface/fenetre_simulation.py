@@ -123,7 +123,7 @@ class FenetreSimulation(QMainWindow):
         formulaire.addRow(self.etiquette_phase)
         formulaire.addRow(QLabel("Temps d'accumulation"))
         self.etiquettes_reserves = {}
-        for axe, nom in (("EW", "Ligne horizontale"), ("NS", "Ligne verticale")):
+        for axe, nom in (("EO", "Ligne horizontale"), ("NS", "Ligne verticale")):
             self.etiquettes_reserves[axe] = QLabel()
             formulaire.addRow(nom, self.etiquettes_reserves[axe])
         explication = QLabel("Au-dela de 8 s de vert prioritaire, les secondes sont "
@@ -248,7 +248,7 @@ class FenetreSimulation(QMainWindow):
                 en_attente += 1
         self.nombre_attentes.setText(str(en_attente))
         self.nombre_trajets_termines.setText(str(etat_simulation.trajets_termines))
-        noms = {"red": "Rouge", "amber": "Orange", "green": "Vert"}
+        noms = {"rouge": "Rouge", "orange": "Orange", "vert": "Vert"}
         self.etiquettes_feux["Nord-Sud"].setText(noms[etat_simulation.nord_sud])
         self.etiquettes_feux["Est-Ouest"].setText(noms[etat_simulation.est_ouest])
         if etat_simulation.temps_phase_restant > 0:

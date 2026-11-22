@@ -19,22 +19,22 @@ class TestsSimulation(unittest.TestCase):
         """Le feu opposé attend que le carrefour soit libre."""
         feux = Feux()
         avancer_feux(feux, 8)
-        self.assertEqual(feux.signal("NS"), "amber")
+        self.assertEqual(feux.signal("NS"), "orange")
         avancer_feux(feux, 1)
-        self.assertEqual(feux.phase, "all_red")
+        self.assertEqual(feux.phase, "tout_rouge")
         avancer_feux(feux, 2, libre=False)
-        self.assertEqual(feux.phase, "all_red")
+        self.assertEqual(feux.phase, "tout_rouge")
         avancer_feux(feux, 0.05)
-        self.assertEqual(feux.signal("EW"), "green")
+        self.assertEqual(feux.signal("EO"), "vert")
 
     def test_compensation(self):
         """Douze secondes de retard donnent trois secondes de vert en plus."""
         feux = Feux()
         demande = DemandePriorite("01", "NS", 0, 0)
         avancer_feux(feux, 20, [demande])
-        self.assertAlmostEqual(feux.reserve_temps["EW"], 12)
+        self.assertAlmostEqual(feux.reserve_temps["EO"], 12)
         avancer_feux(feux, 2.05)
-        self.assertEqual(feux.signal("EW"), "green")
+        self.assertEqual(feux.signal("EO"), "vert")
         self.assertAlmostEqual(feux.bonus_compensation, 3)
 
     def test_mission(self):

@@ -9,7 +9,7 @@ from PyQt6.QtGui import QPainterPath, QPolygonF
 def verifier_espacement(verification, simulation):
     """Vérifie les distances de suivi et l'absence de contact entre les carrosseries."""
     for premier, second in combinations(simulation.vehicules, 2):
-        if (premier.type_vehicule == second.type_vehicule == "car"
+        if (premier.type_vehicule == second.type_vehicule == "voiture"
                 and premier.decalage_lateral == second.decalage_lateral == 0):
             verification.assertGreaterEqual(hypot(premier.position[0] - second.position[0],
                                          premier.position[1] - second.position[1]), 44 - 1e-6,
@@ -17,7 +17,7 @@ def verifier_espacement(verification, simulation):
             continue
         chemins = []
         for vehicule in (premier, second):
-            longueur, largeur = (28, 15) if vehicule.type_vehicule == "car" else (36, 18)
+            longueur, largeur = (28, 15) if vehicule.type_vehicule == "voiture" else (36, 18)
             x, y, angle = vehicule.position
             c, s = cos(radians(angle)), sin(radians(angle))
             points = []

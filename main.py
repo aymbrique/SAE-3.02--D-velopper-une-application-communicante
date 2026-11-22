@@ -22,7 +22,7 @@ def main():
         configuration = configuration_reseau(lire_configuration(arguments.configuration))
     except ValueError as error:
         analyseur.error(str(error))
-    hote = arguments.hote or configuration["host"]
+    hote = arguments.hote or configuration["hote"]
     port = arguments.port if arguments.port is not None else configuration["port"]
     if not 1 <= port <= 65535:
         analyseur.error("Port TCP invalide")

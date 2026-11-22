@@ -20,7 +20,7 @@ class StockageMemoire:
 
     def instantane(self):
         """Fournit au serveur l'historique des messages du test."""
-        return {"vehicles": [], "history": list(self.messages)}
+        return {"vehicules": [], "historique": list(self.messages)}
 
 
 class TestsReseau(unittest.TestCase):
@@ -29,7 +29,7 @@ class TestsReseau(unittest.TestCase):
     def test_decodage_messages(self):
         """Le décodeur attend la fin du premier message et retrouve le suivant."""
         decodeur = Decodeur()
-        ping = {"type": "ping"}
+        ping = {"type": "verification_liaison"}
         donnees = encoder(ping)
         self.assertEqual(decodeur.alimenter(donnees[:3]), [])
         self.assertEqual(decodeur.alimenter(donnees[3:] + donnees), [ping, ping])
@@ -47,4 +47,4 @@ class TestsReseau(unittest.TestCase):
         while client.instantane()[1] and time.monotonic() < limite:
             time.sleep(0.02)
         self.assertEqual(client.instantane()[1], 0)
-        self.assertEqual(serveur.instantane()["history"][0]["etat"], "occupe")
+        self.assertEqual(serveur.instantane()["historique"][0]["etat"], "occupe")

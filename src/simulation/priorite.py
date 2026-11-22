@@ -10,7 +10,7 @@ MARGE_DEPASSEMENT = 40.0
 def coins_carrosserie(vehicule, position, marge_supplementaire=0.0):
     """Renvoie les quatre coins orientés du véhicule avec la marge demandée."""
     x, y, angle = position
-    longueur, largeur = (28, 15) if vehicule.type_vehicule == "car" else (36, 18)
+    longueur, largeur = (28, 15) if vehicule.type_vehicule == "voiture" else (36, 18)
     avant_vehicule = (cos(radians(angle)), sin(radians(angle)))
     droite = (-avant_vehicule[1], avant_vehicule[0])
     return tuple((x + a * (longueur / 2 + marge_supplementaire) * avant_vehicule[0]

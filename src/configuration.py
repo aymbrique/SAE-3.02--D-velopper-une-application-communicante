@@ -10,13 +10,13 @@ RACINE = Path(__file__).resolve().parents[1]
 def lire_configuration(chemin=None):
     """Lit le fichier INI du projet.
 
-    Args:
+    Paramètres :
         chemin: Fichier à lire, ou None pour utiliser config.ini à la racine.
 
-    Returns:
+    Résultat :
         Les réglages lus, ou une configuration vide si le fichier par défaut manque.
 
-    Raises:
+    Exceptions :
         ValueError: Si le fichier demandé manque ou si son format est invalide.
     """
     analyseur = ConfigParser(interpolation=None)
@@ -35,7 +35,7 @@ def configuration_reseau(analyseur):
     port = analyseur.getint("reseau", "port", fallback=5000)
     if not 1 <= port <= 65535:
         raise ValueError("Le port TCP doit etre compris entre 1 et 65535")
-    return {"host": analyseur.get("reseau", "serveur", fallback="127.0.0.1"), "port": port}
+    return {"hote": analyseur.get("reseau", "serveur", fallback="127.0.0.1"), "port": port}
 
 
 def configuration_base(analyseur):

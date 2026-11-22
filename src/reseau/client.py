@@ -65,12 +65,12 @@ class ClientEtats:
     def _echanger(self, canal, message, decodeur):
         """Envoie un message et attend la réponse correspondante.
 
-        Args:
+        Paramètres :
             canal: Socket connectée au centre.
-            message: État ou ping à envoyer.
+            message: État ou vérification de liaison à envoyer.
             decodeur: Décodeur utilisé pour les réponses de cette connexion.
 
-        Raises:
+        Exceptions :
             ConnectionError: Si la connexion ferme ou si la réponse est inattendue.
             TimeoutError: Si aucune confirmation n'arrive dans le délai de 5 secondes.
         """
@@ -84,9 +84,9 @@ class ClientEtats:
             if not donnees:
                 raise ConnectionError("Connexion fermee")
             for reponse in decodeur.alimenter(donnees):
-                if message["type"] == "ping" and reponse.get("type") == "pong":
+                if message["type"] == "verification_liaison" and reponse.get("type") == "liaison_confirmee":
                     return
-                if (reponse.get("type") == "ack" and reponse.get("session") == message.get("session")
+                if (reponse.get("type") == "accuse_reception" and reponse.get("session") == message.get("session")
                         and reponse.get("id") == message.get("id") and reponse.get("numero") == message.get("numero")):
                     return
                 raise ConnectionError("Reponse inattendue du centre")
@@ -118,7 +118,7 @@ class ClientEtats:
                                 self.en_attente_envoi.popleft()
                             self._modifier_statut("Connecte au centre")
                         elif monotonic() >= prochain_ping:
-                            self._echanger(canal, {"type": "ping"}, decodeur)
+                            self._echanger(canal, {"type": "verification_liaison"}, decodeur)
                             self._modifier_statut("Connecte au centre")
                             prochain_ping = monotonic() + 1
                         else:

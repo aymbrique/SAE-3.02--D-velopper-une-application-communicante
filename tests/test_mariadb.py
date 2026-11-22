@@ -38,13 +38,13 @@ class TestsMariaDB(unittest.TestCase):
         retour = dict(self.message, etat="disponible", numero=2)
         self.stockage.enregistrer(retour)
         donnees = self.stockage.instantane()
-        self.assertEqual(len(donnees["vehicles"]), 1)
-        self.assertEqual(donnees["vehicles"][0]["etat"], "disponible")
-        etats = [ligne["etat"] for ligne in donnees["history"]]
+        self.assertEqual(len(donnees["vehicules"]), 1)
+        self.assertEqual(donnees["vehicules"][0]["etat"], "disponible")
+        etats = [ligne["etat"] for ligne in donnees["historique"]]
         self.assertEqual(etats, ["disponible", "occupe"])
 
     def test_doublon(self):
         """Le renvoi du même message n'ajoute pas une ligne à l'historique."""
         self.assertTrue(self.stockage.enregistrer(self.message))
         self.assertFalse(self.stockage.enregistrer(self.message))
-        self.assertEqual(len(self.stockage.instantane()["history"]), 1)
+        self.assertEqual(len(self.stockage.instantane()["historique"]), 1)

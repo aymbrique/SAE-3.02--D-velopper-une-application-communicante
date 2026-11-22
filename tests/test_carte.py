@@ -35,10 +35,10 @@ class TestsCarte(unittest.TestCase):
         image = self.dessiner_carte()
         for entree in ENTREES_SITES.values():
             x, y = NOEUDS[entree]
-            self.assertEqual(image.pixelColor(x + 20, y - DEMI_LARGEUR_ROUTE + 4), QColor("gray"))
-            self.assertEqual(image.pixelColor(x + 20, y - DEMI_LARGEUR_ROUTE - 4), QColor("lightgray"))
-        self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE + 4, 200), QColor("gray"))
-        self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE - 4, 200), QColor("lightgray"))
+            self.assertEqual(image.pixelColor(x + 20, y - DEMI_LARGEUR_ROUTE + 4), QColor("#808080"))
+            self.assertEqual(image.pixelColor(x + 20, y - DEMI_LARGEUR_ROUTE - 4), QColor("#d3d3d3"))
+        self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE + 4, 200), QColor("#808080"))
+        self.assertEqual(image.pixelColor(CX - DEMI_LARGEUR_ROUTE - 4, 200), QColor("#d3d3d3"))
 
     def test_sorties_carte(self):
         """Vérifie les sept sorties routières et l'absence de sortie supplémentaire au sud."""
@@ -46,5 +46,5 @@ class TestsCarte(unittest.TestCase):
         for x, y in ((CX + 34, 0), (850 + 34, 0), (0, CY + 34),
                      (LARGEUR_SCENE - 1, CY + 34), (0, 950 + 34),
                      (LARGEUR_SCENE - 1, 950 + 34), (LARGEUR_SCENE - 1, 240 + 34)):
-            self.assertEqual(image.pixelColor(x, y), QColor("gray"))
+            self.assertEqual(image.pixelColor(x, y), QColor("#808080"))
         self.assertEqual(image.pixelColor(CX + 34, HAUTEUR_SCENE - 1), QColor("#a8cf8a"))

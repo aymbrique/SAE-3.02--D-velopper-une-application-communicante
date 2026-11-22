@@ -11,8 +11,8 @@ class TestsArrivees(unittest.TestCase):
 
     def test_bords_trajets(self):
         """Chaque trajet commence et se termine hors de la carte."""
-        for origine in ("N", "S", "E", "W"):
-            for virage in ("straight", "left", "right"):
+        for origine in ("N", "S", "E", "O"):
+            for virage in ("tout_droit", "gauche", "droite"):
                 with self.subTest(origine=origine, virage=virage):
                     trajet, arret = trajet_voiture(origine, virage)
                     self.assertGreater(arret, 0)
@@ -24,12 +24,12 @@ class TestsArrivees(unittest.TestCase):
     def test_arrivee_file(self):
         """Une seconde voiture apparaît seulement si son entrée est libre."""
         simulation = Simulation(debit=0)
-        premiere = simulation.ajouter_voiture("N", "straight")
+        premiere = simulation.ajouter_voiture("N", "tout_droit")
         self.assertIsNotNone(premiere)
-        self.assertIsNone(simulation.ajouter_voiture("N", "straight"))
+        self.assertIsNone(simulation.ajouter_voiture("N", "tout_droit"))
 
         premiere.distance = DISTANCE_SECURITE
-        seconde = simulation.ajouter_voiture("N", "straight")
+        seconde = simulation.ajouter_voiture("N", "tout_droit")
         self.assertIsNotNone(seconde)
         self.assertEqual(seconde.distance, 0)
 
@@ -37,14 +37,14 @@ class TestsArrivees(unittest.TestCase):
         """Sur une série reproductible, la majorité des voitures va tout droit."""
         simulation = Simulation(graine=302)
         choix = [simulation.choisir_virage() for _ in range(1000)]
-        self.assertGreater(choix.count("straight"), 900)
-        self.assertIn("left", choix)
-        self.assertIn("right", choix)
+        self.assertGreater(choix.count("tout_droit"), 900)
+        self.assertIn("gauche", choix)
+        self.assertIn("droite", choix)
 
     def test_variantes_trajets(self):
         """Les deux bifurcations mènent aux sorties prévues sur le plan."""
-        ouest, _ = trajet_voiture("N", "straight", variante="lower_west")
-        nord, _ = trajet_voiture("W", "straight", variante="middle_north")
+        ouest, _ = trajet_voiture("N", "tout_droit", variante="bifurcation_ouest_bas")
+        nord, _ = trajet_voiture("O", "tout_droit", variante="bifurcation_nord_milieu")
 
-        self.assertEqual(ouest.noeuds[-1], "low_west")
-        self.assertEqual(nord.noeuds[-1], "top")
+        self.assertEqual(ouest.noeuds[-1], "bas_ouest")
+        self.assertEqual(nord.noeuds[-1], "haut")

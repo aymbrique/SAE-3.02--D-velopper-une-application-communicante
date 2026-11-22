@@ -11,9 +11,9 @@ def dessiner_barriere(scene, x, y, largeur):
     """Dessine une barrière rouge et blanche à la position donnée."""
     for dx in (6, largeur - 10):
         rectangle(scene, x + dx, y + 8, 4, 16, "#50565a")
-    rectangle(scene, x, y, largeur, 10, "white")
+    rectangle(scene, x, y, largeur, 10, "#ffffff")
     for index in (0, 2, 4):
-        rectangle(scene, x + index * largeur / 5, y, largeur / 5, 10, "red")
+        rectangle(scene, x + index * largeur / 5, y, largeur / 5, 10, "#ff0000")
 
 
 def dessiner_panneau_travaux(scene, x, y):
@@ -61,9 +61,9 @@ def dessiner_panneaux_priorite(scene):
         x, y = NOEUDS[cle]
         dessiner_cedez_passage(scene, x - DEMI_LARGEUR_ROUTE - 25, y - DEMI_LARGEUR_ROUTE - 28)
         for dx in range(6, DEMI_LARGEUR_ROUTE - 6, 14):
-            rectangle(scene, x - DEMI_LARGEUR_ROUTE + dx, y - DISTANCE_ARRET, 8, 4, "white")
+            rectangle(scene, x - DEMI_LARGEUR_ROUTE + dx, y - DISTANCE_ARRET, 8, 4, "#ffffff")
     # Arrivee de l'est sur le T de la route superieure.
     x, y = NOEUDS["U"]
     dessiner_cedez_passage(scene, x + 110, y - DEMI_LARGEUR_ROUTE - 28)
     for dy in range(6, DEMI_LARGEUR_ROUTE - 6, 14):
-        rectangle(scene, x + DISTANCE_ARRET, y - DEMI_LARGEUR_ROUTE + dy, 4, 8, "white")
+        rectangle(scene, x + DISTANCE_ARRET, y - DEMI_LARGEUR_ROUTE + dy, 4, 8, "#ffffff")

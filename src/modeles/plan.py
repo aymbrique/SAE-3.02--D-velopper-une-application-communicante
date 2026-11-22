@@ -13,28 +13,28 @@ MARGE_DEGAGEMENT = 26
 MARGE_BORD_VOITURE = 30  # Faire apparaitre/disparaitre le rectangle hors de la vue.
 PARKING_X = 270
 PARKING_Y = {"01": 150, "02": 210}
-DESTINATIONS = {"W": "Mairie", "S": "Restaurant",
+DESTINATIONS = {"O": "Mairie", "S": "Restaurant",
                 "N": "IUT de Colmar", "E": "Leclerc"}
-DIRECTIONS_OPPOSEES = {"N": "S", "S": "N", "E": "W", "W": "E"}
+DIRECTIONS_OPPOSEES = {"N": "S", "S": "N", "E": "O", "O": "E"}
 
 # Les noeuds sont les raccordements des routes. C est le seul carrefour a feux.
 NOEUDS = {
-    "C": (CX, CY), "F": (CX, 200), "north": (CX, 0), "depot": (PARKING_X, 200),
-    "W": (150, CY), "west": (0, CY), "B": (850, CY), "R": (1150, CY),
-    "E": (1400, CY), "east": (LARGEUR_SCENE, CY),
+    "C": (CX, CY), "F": (CX, 200), "nord": (CX, 0), "depot": (PARKING_X, 200),
+    "O": (150, CY), "ouest": (0, CY), "B": (850, CY), "R": (1150, CY),
+    "E": (1400, CY), "est": (LARGEUR_SCENE, CY),
     "D": (CX, 950), "L": (150, 950), "Q": (1150, 950),
-    "low_west": (0, 950), "low_east": (LARGEUR_SCENE, 950),
-    "U": (850, 240), "top": (850, 0), "H": (1400, 240), "upper_east": (LARGEUR_SCENE, 240),
-    "site_W": (150, 420), "site_S": (150, 810),
+    "bas_ouest": (0, 950), "bas_est": (LARGEUR_SCENE, 950),
+    "U": (850, 240), "haut": (850, 0), "H": (1400, 240), "haut_est": (LARGEUR_SCENE, 240),
+    "site_O": (150, 420), "site_S": (150, 810),
     "site_N": (1400, 110), "site_E": (1400, 420),
 }
 TRONCONS_ROUTES = [
-    ("north", "F"), ("F", "C"), ("C", "D"),
-    ("west", "W"), ("W", "C"), ("C", "B"), ("B", "R"), ("R", "E"), ("E", "east"),
-    ("top", "U"), ("U", "B"), ("U", "H"), ("H", "upper_east"),
-    ("R", "Q"), ("low_west", "L"), ("L", "D"), ("D", "Q"), ("Q", "low_east"),
+    ("nord", "F"), ("F", "C"), ("C", "D"),
+    ("ouest", "O"), ("O", "C"), ("C", "B"), ("B", "R"), ("R", "E"), ("E", "est"),
+    ("haut", "U"), ("U", "B"), ("U", "H"), ("H", "haut_est"),
+    ("R", "Q"), ("bas_ouest", "L"), ("L", "D"), ("D", "Q"), ("Q", "bas_est"),
 ]
-ENTREES_SITES = {"W": "W", "S": "L", "N": "H", "E": "E"}
+ENTREES_SITES = {"O": "O", "S": "L", "N": "H", "E": "E"}
 POINTS_INTERVENTION = {}
 for cote in DESTINATIONS:
     x, y = NOEUDS["site_" + cote]
@@ -58,16 +58,16 @@ def point_sur_voie(centre, orientation, avance):
 def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
     """Construit un trajet à partir des nœuds du plan.
 
-    Args:
+    Paramètres :
         nom: Nom du trajet.
         noeuds: Noms des points du plan à relier dans l'ordre.
         parking_y: Ordonnée de la place à la caserne, ou None pour une voiture.
         limites_circulation: Limites visibles à dépasser aux entrées et sorties.
 
-    Returns:
+    Résultat :
         Un Trajet avec ses virages, ses passages et ses raccordements.
 
-    Raises:
+    Exceptions :
         ValueError: Si le parcours emprunte un sens ou un virage interdit.
     """
     noeuds = tuple(noeuds)
@@ -121,7 +121,7 @@ def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
             points.extend(virage_arrondi(points[-1], controle1, controle2, fin))
             indices_virages.append((debut_virage, len(points) - 1))
         if cle == "C":
-            axe = "NS" if entree_direction[0] == 0 else "EW"
+            axe = "NS" if entree_direction[0] == 0 else "EO"
             indices_passages.append((debut, len(points) - 1, axe))
         else:
             indices_raccordements.append((debut, len(points) - 1, MARGE_DEGAGEMENT, cle))
@@ -139,8 +139,8 @@ def construire_trajet(nom, noeuds, parking_y=None, limites_circulation=None):
             points.append(point_hors_carte(points[-1], dernier, limites_circulation))
     else:
         points.extend([(340, 166), (340, parking_y), (PARKING_X, parking_y)])
-        indices_raccordements.append((0, indice_sortie_caserne, MARGE_DEGAGEMENT, "parking"))
-        indices_raccordements.append((indice_retour_caserne, len(points) - 1, 0, "parking"))
+        indices_raccordements.append((0, indice_sortie_caserne, MARGE_DEGAGEMENT, "stationnement"))
+        indices_raccordements.append((indice_retour_caserne, len(points) - 1, 0, "stationnement"))
 
     # Convertir les indices des points en distances utilisables par la simulation.
     trajet = Trajet(nom, points)
@@ -183,45 +183,45 @@ def point_hors_carte(point, orientation, limites, entre=False):
 def trajet_voiture(origine, virage, limites_circulation=(0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), *, variante=None):
     """Prépare le parcours d'une voiture selon son origine et son virage.
 
-    Args:
-        origine: Côté d'arrivée, parmi N, S, E et W.
-        virage: Mouvement au feu : straight, left ou right.
+    Paramètres :
+        origine: Côté d'arrivée, parmi N, S, E et O.
+        virage: Mouvement au feu : tout_droit, gauche ou droite.
         limites_circulation: Limites visibles utilisées pour les extrémités du trajet.
         variante: Bifurcation après le feu, ou None pour le parcours habituel.
 
-    Returns:
+    Résultat :
         Le trajet et la distance de sa ligne d'arrêt au carrefour principal.
     """
     approches = {
-        "N": ["north", "F", "C"], "W": ["west", "W", "C"],
-        "E": ["upper_east", "H", "U", "B", "C"],
-        "S": ["low_east", "Q", "D", "C"],
+        "N": ["nord", "F", "C"], "O": ["ouest", "O", "C"],
+        "E": ["haut_est", "H", "U", "B", "C"],
+        "S": ["bas_est", "Q", "D", "C"],
     }
     sorties = {
-        "N": ["C", "F", "north"], "W": ["C", "W", "west"],
-        "E": ["C", "B", "R", "E", "east"],
-        "S": ["C", "D", "Q", "low_east"],
+        "N": ["C", "F", "nord"], "O": ["C", "O", "ouest"],
+        "E": ["C", "B", "R", "E", "est"],
+        "S": ["C", "D", "Q", "bas_est"],
     }
     destinations = {
-        "N": {"straight": "S", "left": "E", "right": "W"},
-        "S": {"straight": "N", "left": "W", "right": "E"},
-        "W": {"straight": "E", "left": "N", "right": "S"},
-        "E": {"straight": "W", "left": "S", "right": "N"},
+        "N": {"tout_droit": "S", "gauche": "E", "droite": "O"},
+        "S": {"tout_droit": "N", "gauche": "O", "droite": "E"},
+        "O": {"tout_droit": "E", "gauche": "N", "droite": "S"},
+        "E": {"tout_droit": "O", "gauche": "S", "droite": "N"},
     }
-    noms = {"N": "Nord", "S": "Sud", "E": "Est", "W": "Ouest"}
-    mouvements = {"straight": "tout droit", "left": "a gauche", "right": "a droite"}
+    noms = {"N": "Nord", "S": "Sud", "E": "Est", "O": "Ouest"}
+    mouvements = {"tout_droit": "tout droit", "gauche": "a gauche", "droite": "a droite"}
     destination = destinations[origine][virage]
     noeuds_sortie = sorties[destination]
     suffixe = ""
-    if variante == "lower_west":
+    if variante == "bifurcation_ouest_bas":
         if destination != "S":
             raise ValueError("La bifurcation Ouest de D exige une sortie Sud au carrefour C.")
-        noeuds_sortie = ["C", "D", "L", "low_west"]
+        noeuds_sortie = ["C", "D", "L", "bas_ouest"]
         suffixe = " - Ouest par la route du bas"
-    elif variante == "middle_north":
+    elif variante == "bifurcation_nord_milieu":
         if destination != "E":
             raise ValueError("La bifurcation Nord de B exige une sortie Est au carrefour C.")
-        noeuds_sortie = ["C", "B", "U", "top"]
+        noeuds_sortie = ["C", "B", "U", "haut"]
         suffixe = " - Nord par la route du milieu"
     elif variante is not None:
         raise ValueError("Bifurcation de voiture inconnue")
@@ -234,18 +234,18 @@ def trajet_voiture(origine, virage, limites_circulation=(0, 0, LARGEUR_SCENE, HA
 def trajet_secours(identifiant, parking_y, destination="S"):
     """Construit l'aller-retour d'un secours entre la caserne et sa destination.
 
-    Args:
+    Paramètres :
         identifiant: Identifiant du secours.
         parking_y: Ordonnée de sa place à la caserne.
-        destination: Point d'intervention, parmi N, S, E et W.
+        destination: Point d'intervention, parmi N, S, E et O.
 
-    Returns:
+    Résultat :
         Le trajet, les passages au carrefour et la distance de l'arrêt sur place.
     """
     if destination not in DESTINATIONS:
         raise ValueError("Point d'intervention inconnu")
     chemins = {
-        "W": ["depot", "F", "C", "W", "site_W"],
+        "O": ["depot", "F", "C", "O", "site_O"],
         "S": ["depot", "F", "C", "D", "L", "site_S"],
         "N": ["depot", "F", "C", "B", "U", "H", "site_N"],
         "E": ["depot", "F", "C", "B", "R", "E", "site_E"],
@@ -285,4 +285,4 @@ def sur_chaussee(x, y):
                 return True
     return any(abs(x - NOEUDS[cle][0]) <= DEMI_LARGEUR_ROUTE
                and abs(y - NOEUDS[cle][1]) <= DEMI_LARGEUR_ROUTE
-               for cle in ("C", "F", "W", "B", "R", "E", "D", "L", "Q", "U", "H"))
+               for cle in ("C", "F", "O", "B", "R", "E", "D", "L", "Q", "U", "H"))
