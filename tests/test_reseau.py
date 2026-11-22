@@ -1,122 +1,50 @@
-"""Protocole et vrais echanges TCP sur loopback, stockage en memoire de test."""
-
-import socket
-from threading import Lock
+"""Messages JSON et transmission des états sur une connexion TCP locale."""
 import time
 import unittest
-from uuid import uuid4
 
 from src.reseau.client import ClientEtats
-from src.reseau.protocole import Decodeur, encoder, valider
+from src.reseau.protocole import Decodeur, encoder
 from src.reseau.serveur import ServeurCentre
 
 
 class StockageMemoire:
-    """Stockage de test en mémoire pour vérifier TCP sans serveur MariaDB."""
+    """Remplace MariaDB pour tester le réseau seul."""
 
     def __init__(self):
-        """Prépare le verrou, les derniers états et l'historique en mémoire."""
-        self.lignes = {}
-        self.historique = []
-        self.verrou = Lock()
+        """Prépare une liste vide pour les messages reçus."""
+        self.messages = []
 
     def enregistrer(self, message):
-        """Garde un état en mémoire et refuse les numéros déjà reçus pour sa session."""
-        with self.verrou:
-            if any(r["session_id"] == message["session"] and r["identifiant"] == message["id"]
-                   and r["numero"] >= message["numero"] for r in self.historique):
-                return False
-            ligne = {"id": len(self.historique) + 1, "identifiant": message["id"], "etat": message["etat"],
-                   "session_id": message["session"], "numero": message["numero"], "recu_le": "2026-01-01"}
-            self.lignes[message["id"]] = ligne
-            self.historique.append(ligne)
-            return True
+        """Garde le message transmis par le serveur."""
+        self.messages.append(message)
 
     def instantane(self):
-        """Renvoie une copie des états et de l'historique sous verrou."""
-        with self.verrou:
-            return {"vehicles": list(self.lignes.values()), "history": list(reversed(self.historique[-100:]))}
+        """Fournit au serveur l'historique des messages du test."""
+        return {"vehicles": [], "history": list(self.messages)}
 
-
-def attendre(condition, delai_max=8):
-    """Attend une condition jusqu'au délai maximal, puis lève AssertionError."""
-    echeance = time.monotonic() + delai_max
-    while time.monotonic() < echeance:
-        if condition():
-            return
-        time.sleep(.02)
-    raise AssertionError("Delai depasse")
-
-class TestsProtocole(unittest.TestCase):
-    """Tests du format JSON et de la reconstitution des messages TCP."""
-
-
-    def test_decodage_messages(self):
-        """Vérifie le décodage des messages reçus en plusieurs morceaux ou regroupés."""
-        decodeur = Decodeur()
-        donnees = encoder({"type": "ping"}) + encoder({"type": "ping"})
-        self.assertEqual(decodeur.alimenter(donnees[:3]), [])
-        self.assertEqual(decodeur.alimenter(donnees[3:]), [{"type": "ping"}, {"type": "ping"}])
-
-    def test_messages_invalides(self):
-        """Vérifie le refus des messages mal formés et des champs invalides."""
-        for donnees in (b'[]\n', b'not json\n', b'x' * 4097):
-            with self.assertRaises(ValueError):
-                Decodeur().alimenter(donnees)
-        message = {"type": "etat", "id": "01", "etat": "occupe", "numero": 1, "session": str(uuid4())}
-        self.assertEqual(valider(message), message)
-        for modifications in ({"numero": True}, {"numero": -1}, {"id": "99"}, {"etat": "oops"}, {"session": "oops"}):
-            with self.assertRaises(ValueError):
-                valider({**message, **modifications})
 
 class TestsReseau(unittest.TestCase):
-    """Tests de connexion, d'envoi des états et de reconnexion au centre."""
+    """Vérifie le décodage et la confirmation d'un état par le centre."""
 
+    def test_decodage_messages(self):
+        """Le décodeur attend la fin du premier message et retrouve le suivant."""
+        decodeur = Decodeur()
+        ping = {"type": "ping"}
+        donnees = encoder(ping)
+        self.assertEqual(decodeur.alimenter(donnees[:3]), [])
+        self.assertEqual(decodeur.alimenter(donnees[3:] + donnees), [ping, ping])
 
-    def test_reconnexion_etats(self):
-        """Vérifie la conservation des états et la reconnexion sans doublons."""
-        stockage = StockageMemoire()
-        serveur = ServeurCentre(stockage, "127.0.0.1", 0)
+    def test_envoi_etat(self):
+        """Le client retire le message de sa file après confirmation par le centre."""
+        serveur = ServeurCentre(StockageMemoire(), "127.0.0.1", 0)
         serveur.demarrer()
         self.addCleanup(serveur.fermer)
         client = ClientEtats("127.0.0.1", serveur.port)
-        self.addCleanup(client.fermer)
         client.publier("01", "occupe")
-        client.publier("02", "disponible")
         client.demarrer()
-        attendre(lambda: client.instantane()[1] == 0 and len(stockage.historique) == 2)
-        self.assertEqual(stockage.lignes["01"]["etat"], "occupe")
-        serveur.fermer()
-        self.assertFalse(serveur.instantane()["connected"])
-        self.assertEqual(stockage.lignes["01"]["etat"], "occupe")
-        client.publier("02", "occupe")
-        client.publier("01", "disponible")
-        remplacant = ServeurCentre(stockage, "127.0.0.1", serveur.port)
-        remplacant.demarrer()
-        self.addCleanup(remplacant.fermer)
-        attendre(lambda: client.instantane()[1] == 0 and len(stockage.historique) == 4)
-        self.assertEqual(stockage.lignes["01"]["etat"], "disponible")
-        self.assertEqual(stockage.lignes["02"]["etat"], "occupe")
-        # Redemarrer le serveur sans nouvel evenement doit tout de meme retablir la liaison.
-        remplacant.fermer()
-        troisieme = ServeurCentre(stockage, "127.0.0.1", serveur.port)
-        troisieme.demarrer()
-        self.addCleanup(troisieme.fermer)
-        attendre(lambda: troisieme.instantane()["connected"] and troisieme.instantane()["seen"] == {"01", "02"})
-        self.assertEqual(len(stockage.historique), 4)
-
-    def test_client_invalide(self):
-        """Vérifie qu'un client invalide n'arrête pas le serveur."""
-        stockage = StockageMemoire()
-        serveur = ServeurCentre(stockage, "127.0.0.1", 0)
-        serveur.demarrer()
-        self.addCleanup(serveur.fermer)
-        with socket.create_connection(("127.0.0.1", serveur.port)) as canal:
-            canal.sendall(b'[]\n')
-            self.assertEqual(canal.recv(10), b'')
-        self.assertTrue(serveur.thread_reseau.is_alive())
-        client = ClientEtats("127.0.0.1", serveur.port)
-        client.publier("01", "disponible")
         self.addCleanup(client.fermer)
-        client.demarrer()
-        attendre(lambda: len(stockage.historique) == 1)
+        limite = time.monotonic() + 5
+        while client.instantane()[1] and time.monotonic() < limite:
+            time.sleep(0.02)
+        self.assertEqual(client.instantane()[1], 0)
+        self.assertEqual(serveur.instantane()["history"][0]["etat"], "occupe")

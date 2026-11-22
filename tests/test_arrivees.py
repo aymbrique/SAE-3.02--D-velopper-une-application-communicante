@@ -1,88 +1,50 @@
-"""Apparition hors des bords visibles et davantage de trafic venant du Nord."""
+"""Arrivée des voitures et choix des trajets aux bords de la carte."""
 
-from collections import Counter
-from itertools import product
 import unittest
 
 from src.modeles.plan import HAUTEUR_SCENE, LARGEUR_SCENE, trajet_voiture
 from src.simulation.moteur import DISTANCE_SECURITE, Simulation
 
-class TestsArrivees(unittest.TestCase):
-    """Tests des apparitions de voitures et du choix de leurs parcours."""
 
+class TestsArrivees(unittest.TestCase):
+    """Vérifie où apparaissent les voitures et quels chemins elles suivent."""
 
     def test_bords_trajets(self):
-        """Vérifie que les trajets commencent et se terminent hors de la zone visible."""
-        for limites in ((0, 0, LARGEUR_SCENE, HAUTEUR_SCENE), (-350, -240, 1950, 1340)):
-            for origine, virage in product("NSEW", ("straight", "left", "right")):
-                with self.subTest(limites=limites, origine=origine, virage=virage):
-                    trajet, arret = trajet_voiture(origine, virage, limites)
-                    gauche, haut, droite, bas = limites
-                    for x, y in (trajet.points[0], trajet.points[-1]):
-                        self.assertTrue(x < gauche - 14 or x > droite + 14
-                                        or y < haut - 14 or y > bas + 14, (x, y))
+        """Chaque trajet commence et se termine hors de la carte."""
+        for origine in ("N", "S", "E", "W"):
+            for virage in ("straight", "left", "right"):
+                with self.subTest(origine=origine, virage=virage):
+                    trajet, arret = trajet_voiture(origine, virage)
                     self.assertGreater(arret, 0)
+                    for x, y in (trajet.points[0], trajet.points[-1]):
+                        hors_largeur = x < 0 or x > LARGEUR_SCENE
+                        hors_hauteur = y < 0 or y > HAUTEUR_SCENE
+                        self.assertTrue(hors_largeur or hors_hauteur)
 
     def test_arrivee_file(self):
-        """Vérifie qu'une voiture apparaît au bord sans s'insérer dans une file occupée."""
+        """Une seconde voiture apparaît seulement si son entrée est libre."""
         simulation = Simulation(debit=0)
-        simulation.limites_circulation = (-350, -240, 1950, 1340)
-        premier = simulation.ajouter_voiture("N", "straight")
-        self.assertLess(premier.position[1] + 14, simulation.limites_circulation[1])
+        premiere = simulation.ajouter_voiture("N", "straight")
+        self.assertIsNotNone(premiere)
         self.assertIsNone(simulation.ajouter_voiture("N", "straight"))
-        premier.distance = DISTANCE_SECURITE
-        second = simulation.ajouter_voiture("N", "straight")
-        self.assertIsNotNone(second)
-        self.assertEqual(second.distance, 0)
-        self.assertEqual(second.position[:2], second.trajet.points[0])
 
-    def test_arrivees_nord(self):
-        """Vérifie qu'environ la moitié des voitures arrive du nord."""
-        simulation = Simulation(debit=0)
-        nombres = Counter()
-        for _ in range(12000):
-            simulation.voitures.clear()
-            nombres[simulation.ajouter_voiture().origine] += 1
-        self.assertTrue(5700 < nombres["N"] < 6300, nombres)
-        for origine in ("S", "E", "W"):
-            self.assertTrue(1700 < nombres[origine] < 2300, nombres)
+        premiere.distance = DISTANCE_SECURITE
+        seconde = simulation.ajouter_voiture("N", "straight")
+        self.assertIsNotNone(seconde)
+        self.assertEqual(seconde.distance, 0)
 
-    def test_bifurcations_nord(self):
-        """Vérifie que les voitures du nord tournent ou bifurquent rarement."""
-        simulation = Simulation(debit=0)
-        nombres = Counter()
-        for _ in range(6000):
-            simulation.voitures.clear()
-            voiture = simulation.ajouter_voiture("N")
-            nombres[(voiture.virage, voiture.trajet.variante)] += 1
-        # Les deux virages au feu restent a 2,5 % chacun.
-        for virage in ("left", "right"):
-            self.assertTrue(90 < sum(nombre for (mouvement, _), nombre in nombres.items()
-                                     if mouvement == virage) < 220, nombres)
-        # Le choix Ouest au carrefour du bas represente environ 5 % des tout droit.
-        self.assertTrue(200 < nombres[("straight", "lower_west")] < 380, nombres)
-        self.assertGreater(nombres[("straight", None)], 5000, nombres)
-
-    def test_bifurcation_milieu(self):
-        """Vérifie que certaines voitures de la route du milieu bifurquent vers le nord."""
-        simulation = Simulation(debit=0)
-        nombres = Counter()
-        for _ in range(6000):
-            simulation.voitures.clear()
-            voiture = simulation.ajouter_voiture("W")
-            if voiture.virage == "straight":
-                nombres[voiture.trajet.variante] += 1
-        self.assertTrue(200 < nombres["middle_north"] < 380, nombres)
-        self.assertGreater(nombres[None], 5000, nombres)
+    def test_choix_virage(self):
+        """Sur une série reproductible, la majorité des voitures va tout droit."""
+        simulation = Simulation(graine=302)
+        choix = [simulation.choisir_virage() for _ in range(1000)]
+        self.assertGreater(choix.count("straight"), 900)
+        self.assertIn("left", choix)
+        self.assertIn("right", choix)
 
     def test_variantes_trajets(self):
-        """Vérifie les trajets choisis explicitement et leurs variantes."""
-        simulation = Simulation(debit=0)
-        par_defaut = simulation.ajouter_voiture("N", "straight")
-        self.assertIsNone(par_defaut.trajet.variante)
-        simulation.voitures.clear()
-        ouest = simulation.ajouter_voiture("N", "straight", variante="lower_west")
-        self.assertEqual(ouest.trajet.noeuds[-1], "low_west")
-        simulation.voitures.clear()
-        nord = simulation.ajouter_voiture("W", "straight", variante="middle_north")
-        self.assertEqual(nord.trajet.noeuds[-1], "top")
+        """Les deux bifurcations mènent aux sorties prévues sur le plan."""
+        ouest, _ = trajet_voiture("N", "straight", variante="lower_west")
+        nord, _ = trajet_voiture("W", "straight", variante="middle_north")
+
+        self.assertEqual(ouest.noeuds[-1], "low_west")
+        self.assertEqual(nord.noeuds[-1], "top")

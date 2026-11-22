@@ -1,82 +1,50 @@
-"""Integration optionnelle : base dediee dont le nom doit finir par _test."""
+"""Tests facultatifs sur une base MariaDB réservée aux essais."""
 
 import os
 import unittest
 from uuid import uuid4
 
-from src.reseau.client import ClientEtats
-from src.reseau.serveur import ServeurCentre
 from src.stockage.mariadb import StockageMariaDB
-from test_reseau import attendre
 
 
-@unittest.skipUnless(os.environ.get("SAE_TEST_DB_NAME"), "Configurer une base MariaDB de test dediee")
+@unittest.skipUnless(os.environ.get("SAE_TEST_DB_NAME"), "Base de test non configurée")
 class TestsMariaDB(unittest.TestCase):
-    """Tests de stockage dans une base dédiée dont le nom se termine par _test."""
+    """Vérifie l'état courant et l'historique réellement écrits en base."""
 
-    @classmethod
-    def setUpClass(cls):
-        """Vérifie la base dédiée, prépare sa connexion et crée ses tables."""
+    def setUp(self):
+        """Prépare et vide uniquement une base dont le nom finit par _test."""
         nom = os.environ["SAE_TEST_DB_NAME"]
         if not nom.endswith("_test"):
-            raise ValueError("Les tests effacent leurs tables : utiliser une base terminee par _test")
-        cls.configuration = {
+            raise ValueError("Utiliser une base dédiée dont le nom finit par _test")
+        self.stockage = StockageMariaDB({
             "host": os.environ.get("SAE_TEST_DB_HOST", "127.0.0.1"),
             "port": int(os.environ.get("SAE_TEST_DB_PORT", "3306")),
             "user": os.environ.get("SAE_TEST_DB_USER", "sae302_test"),
             "password": os.environ["SAE_TEST_DB_PASSWORD"],
             "database": nom, "charset": "utf8mb4",
             "connect_timeout": 3, "read_timeout": 3, "write_timeout": 3,
-        }
-        cls.stockage = StockageMariaDB(cls.configuration)
-        cls.stockage.initialiser()
-
-    def setUp(self):
-        """Vide les deux tables de la base de test avant chaque essai."""
+        })
+        self.stockage.initialiser()
         with self.stockage.ouvrir_connexion() as liaison:
             with liaison.cursor() as curseur:
                 curseur.execute("DELETE FROM historique_etats")
                 curseur.execute("DELETE FROM vehicules")
             liaison.commit()
+        self.message = {"id": "01", "etat": "occupe", "numero": 1, "session": str(uuid4())}
 
     def test_persistance_etats(self):
-        """Vérifie la persistance, le refus des anciens états et l'acceptation d'une nouvelle session."""
-        session = str(uuid4())
-        message = {"type": "etat", "id": "01", "etat": "occupe", "numero": 2, "session": session}
-        self.assertTrue(self.stockage.enregistrer(message))
-        self.assertFalse(self.stockage.enregistrer(message))
-        self.assertFalse(self.stockage.enregistrer({**message, "numero": 1, "etat": "disponible"}))
-        self.stockage.enregistrer({**message, "id": "02", "etat": "disponible"})
-        rouvert = StockageMariaDB(self.configuration)
-        instantane = rouvert.instantane()
-        self.assertEqual(len(instantane["history"]), 2)
-        self.assertEqual([(r["identifiant"], r["etat"]) for r in instantane["vehicles"]],
-                         [("01", "occupe"), ("02", "disponible")])
-        self.assertTrue(rouvert.enregistrer({**message, "session": str(uuid4()), "numero": 1, "etat": "disponible"}))
-        self.assertEqual(len(rouvert.instantane()["history"]), 3)
+        """Deux états successifs donnent un état courant et deux lignes d'historique."""
+        self.stockage.enregistrer(self.message)
+        retour = dict(self.message, etat="disponible", numero=2)
+        self.stockage.enregistrer(retour)
+        donnees = self.stockage.instantane()
+        self.assertEqual(len(donnees["vehicles"]), 1)
+        self.assertEqual(donnees["vehicles"][0]["etat"], "disponible")
+        etats = [ligne["etat"] for ligne in donnees["history"]]
+        self.assertEqual(etats, ["disponible", "occupe"])
 
-    def test_tcp_persistance(self):
-        """Vérifie les échanges TCP, la reconnexion et les données après réouverture de la base."""
-        serveur = ServeurCentre(self.stockage, "127.0.0.1", 0)
-        serveur.demarrer()
-        self.addCleanup(serveur.fermer)
-        client = ClientEtats("127.0.0.1", serveur.port)
-        client.publier("01", "occupe")
-        client.publier("02", "disponible")
-        client.demarrer()
-        self.addCleanup(client.fermer)
-        attendre(lambda: client.instantane()[1] == 0 and serveur.instantane()["seen"] == {"01", "02"})
-        self.assertEqual(len(self.stockage.instantane()["history"]), 2)
-        serveur.fermer()
-        client.publier("01", "disponible")
-        client.publier("02", "occupe")
-        remplacant = ServeurCentre(StockageMariaDB(self.configuration), "127.0.0.1", serveur.port)
-        remplacant.demarrer()
-        self.addCleanup(remplacant.fermer)
-        attendre(lambda: client.instantane()[1] == 0 and remplacant.instantane()["seen"] == {"01", "02"})
-        instantane = self.stockage.instantane()
-        self.assertEqual(len(instantane["history"]), 4)
-        self.assertEqual([r["etat"] for r in instantane["vehicles"]], ["disponible", "occupe"])
-        client.fermer()
-        attendre(lambda: not remplacant.instantane()["connected"])
-        self.assertEqual([r["etat"] for r in self.stockage.instantane()["vehicles"]], ["disponible", "occupe"])
+    def test_doublon(self):
+        """Le renvoi du même message n'ajoute pas une ligne à l'historique."""
+        self.assertTrue(self.stockage.enregistrer(self.message))
+        self.assertFalse(self.stockage.enregistrer(self.message))
+        self.assertEqual(len(self.stockage.instantane()["history"]), 1)

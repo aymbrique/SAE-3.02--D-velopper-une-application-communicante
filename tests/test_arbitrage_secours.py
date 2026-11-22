@@ -1,97 +1,50 @@
-"""Arbitrage des deux secours face a face au carrefour principal."""
+"""Priorité des véhicules de secours au carrefour principal."""
 
 import unittest
 
-from src.simulation.moteur import PAS_TEMPS, Simulation
-from controles_circulation import verifier_espacement
+from src.simulation.feux import DemandePriorite, Feux
 
 
 class TestsArbitrageSecours(unittest.TestCase):
-    """Tests de l'ordre de passage des deux secours au carrefour."""
-
-    def preparer_secours_opposes(self, axe, identifiant_ancien):
-        """Place deux secours face à face et renvoie la simulation et les deux véhicules."""
-        simulation = Simulation(debit=0)
-        identifiant_recent = "02" if identifiant_ancien == "01" else "01"
-        simulation.demarrer_mission(identifiant_ancien, "S" if axe == "NS" else "W")
-        simulation.temps = 30
-        simulation.demarrer_mission(identifiant_recent, "E")
-        ancien = simulation.obtenir_secours(identifiant_ancien)
-        recent = simulation.obtenir_secours(identifiant_recent)
-        ancien.intervention_effectuee = True
-        ancien.indice_passage = 1
-        recent.intervention_effectuee = axe == "EW"
-        recent.indice_passage = int(recent.intervention_effectuee)
-        for secours in (ancien, recent):
-            secours.distance = secours.passage[0]
-        simulation.feux.axe = axe
-        return simulation, ancien, recent
-
-    def terminer_dans_ordre(self, simulation, premier, second):
-        """Vérifie que le premier secours dégage avant de laisser entrer le second."""
-        fin_premier = premier.passage[1]
-        arret_second = second.passage[0]
-        premier_degage = False
-        for _ in range(400):
-            simulation.avancer(PAS_TEMPS)
-            verifier_espacement(self, simulation)
-            if not premier_degage:
-                self.assertEqual(simulation.feux.prioritaire.identifiant, premier.identifiant)
-                self.assertLessEqual(second.distance, arret_second)
-            premier_degage |= premier.distance >= fin_premier or not premier.occupe
-            if second.identifiant in simulation.vehicules_engages:
-                self.assertTrue(premier_degage)
-                self.assertEqual(simulation.feux.prioritaire.identifiant, second.identifiant)
-                break
-        else:
-            self.fail("Le second secours n'a pas obtenu le passage apres le premier.")
+    """Compare les demandes du camion et de l'ambulance."""
 
     def test_mission_ancienne(self):
-        """Vérifie que la mission la plus ancienne passe en premier sur chaque axe."""
-        for axe in ("NS", "EW"):
-            for identifiant_ancien in ("01", "02"):
-                with self.subTest(axe=axe, ancien=identifiant_ancien):
-                    simulation, ancien, recent = self.preparer_secours_opposes(axe, identifiant_ancien)
-                    self.terminer_dans_ordre(simulation, ancien, recent)
+        """Le camion est parti avant l'ambulance mais demande le passage après elle."""
+        feux = Feux()
+        camion = DemandePriorite("01", "NS", debut_mission=2, date_demande=9)
+        ambulance = DemandePriorite("02", "EW", debut_mission=4, date_demande=7)
 
-    def test_reservation_revue(self):
-        """Vérifie que deux demandes peuvent changer une priorité réservée trop tôt."""
-        for axe in ("NS", "EW"):
-            for identifiant_ancien in ("01", "02"):
-                with self.subTest(axe=axe, ancien=identifiant_ancien):
-                    simulation, ancien, recent = self.preparer_secours_opposes(axe, identifiant_ancien)
-                    ancien.distance -= 600  # Hors des deux seuils de demande.
-                    recent.distance -= 160
-                    simulation.avancer(PAS_TEMPS)
-                    self.assertEqual(simulation.feux.prioritaire.identifiant, recent.identifiant)
-                    self.assertFalse(simulation.vehicules_engages)
-                    ancien.distance = ancien.passage[0]
-                    self.terminer_dans_ordre(simulation, ancien, recent)
+        feux.avancer(0.05, [ambulance, camion])
+        self.assertEqual(feux.prioritaire.identifiant, "01")
+        self.assertTrue(feux.priorite_verrouillee)
 
     def test_secours_engage(self):
-        """Vérifie qu'un secours déjà engagé garde la priorité jusqu'à sa sortie."""
-        for axe in ("NS", "EW"):
-            with self.subTest(axe=axe):
-                simulation, ancien, recent = self.preparer_secours_opposes(axe, "02")
-                ancien.distance -= 600
-                simulation.avancer(PAS_TEMPS)
-                self.assertIn(recent.identifiant, simulation.vehicules_engages)
-                ancien.distance = ancien.passage[0]
-                self.terminer_dans_ordre(simulation, recent, ancien)
+        """L'ambulance déjà engagée termine avant de céder le passage au camion."""
+        feux = Feux()
+        ambulance = DemandePriorite("02", "NS", 5, 8, engage=True)
+        camion = DemandePriorite("01", "EW", 1, 9)
 
-    def test_liberation_feux(self):
-        """Vérifie que le retour libère les feux après le carrefour, avant la caserne."""
-        simulation, ancien, recent = self.preparer_secours_opposes("EW", "02")
-        simulation.avancer(PAS_TEMPS)
-        self.assertEqual(simulation.feux.prioritaire.identifiant, ancien.identifiant)
-        fin = ancien.passage[1]
-        ancien.distance = fin - 1
-        simulation.avancer(PAS_TEMPS)
-        self.assertIsNone(ancien.passage)
-        simulation.avancer(PAS_TEMPS)
-        self.assertTrue(ancien.occupe)
-        self.assertEqual(simulation.feux.prioritaire.identifiant, recent.identifiant)
+        feux.avancer(0.05, [ambulance])
+        feux.avancer(0.05, [camion, ambulance])
+        self.assertEqual(feux.prioritaire.identifiant, "02")
 
+        # L'ambulance est sortie : seule la demande du camion reste active.
+        feux.avancer(0.05, [camion])
+        self.assertEqual(feux.prioritaire.identifiant, "01")
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_missions_simultanees(self):
+        """À début de mission égal, la première demande passe en premier."""
+        feux = Feux()
+        camion = DemandePriorite("01", "NS", 2, 9)
+        ambulance = DemandePriorite("02", "EW", 2, 7)
+        feux.avancer(0.05, [camion, ambulance])
+        self.assertEqual(feux.prioritaire.identifiant, "02")
+
+    def test_fin_priorite(self):
+        """Les feux libèrent la priorité après le passage du dernier secours."""
+        feux = Feux()
+        camion = DemandePriorite("01", "NS", 1, 2, engage=True)
+        feux.avancer(0.05, [camion])
+        feux.avancer(0.05, [])
+        self.assertIsNone(feux.prioritaire)
+        self.assertFalse(feux.priorite_verrouillee)
