@@ -57,6 +57,32 @@ class Simulation:
         """Renvoie les voitures et les secours dans une même liste."""
         return self.voitures + self.secours
 
+    def etat_simulation(self):
+        """Prépare l'état de la circulation attendu par l'interface graphique."""
+        etats = []
+        for vehicule in self.vehicules:
+            x, y, orientation = vehicule.position
+            if vehicule.type_vehicule == "car":
+                etape = "Circulation"
+            elif not vehicule.occupe:
+                etape = "Disponible"
+            elif vehicule.temps_intervention_restant > 0:
+                etape = "Intervention"
+            elif vehicule.intervention_effectuee:
+                etape = "Retour caserne"
+            else:
+                etape = "Vers " + DESTINATIONS[vehicule.destination]
+            progression = vehicule.distance / vehicule.trajet.longueur if vehicule.occupe else 0.0
+            etats.append(EtatVehicule(
+                vehicule.identifiant, vehicule.type_vehicule, vehicule.couleur,
+                vehicule.trajet, x, y, orientation, vehicule.en_attente,
+                vehicule.occupe, min(1.0, max(0.0, progression)), etape,
+            ))
+        return EtatSimulation(
+            tuple(etats), self.feux.signal("NS"), self.feux.signal("EW"),
+            self.feux.description, self.feux.temps_restant, self.trajets_termines,
+        )
+
     def obtenir_secours(self, identifiant):
         """Retrouve un secours par son identifiant ou lève ValueError s'il est inconnu."""
         for vehicule in self.secours:
